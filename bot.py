@@ -16,6 +16,7 @@ import csv, io
 # Botの準備
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 #===================================
@@ -264,8 +265,8 @@ def make_listed_rows(result):
     return header, rows
 
 #---投票結果CSV作成処理---
-def make_poll_csv(filename, meta, header, rows):
-    print("[start: make_poll_csv]")
+def make_csv(filename, meta, header, rows):
+    print("[start: make_csv]")
     with open(filename, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         # metaの書込
@@ -288,12 +289,12 @@ async def export_poll_csv(interaction, result, msg_id, dt, mode):
     # csv(グループ型)の作成
     header, rows = make_grouped_rows(result)
     grouped_file = f"/tmp/{dt.strftime('%Y%m%d_%H%M')}_grouped.csv"
-    make_poll_csv(grouped_file, meta, header, rows)
+    make_csv(grouped_file, meta, header, rows)
     
     # csv(リスト型)の作成
     header, rows = make_listed_rows(result)
     listed_file = f"/tmp/{dt.strftime('%Y%m%d_%H%M')}_listed.csv"
-    make_poll_csv(listed_file, meta, header, rows)
+    make_csv(listed_file, meta, header, rows)
     
     # discordに送信
     await interaction.followup.send(
@@ -602,5 +603,30 @@ async def poll_result(interaction: discord.Interaction, mode: str):
     else:
         await interaction.response.send_message("投票がありません")
 
+#=====/export_members コマンド=====
+@bot.tree.command(name="export_members", description="メンバーリストを出力します")
+async def export_members(interaction: discord.Interaction):
+    await interaction.response.defer()
+    guild = interaction.guild
+    
+    filename = f"/tmp/members_list_{datetime.now(JST).strftime('%Y%m%d_%H%M')}.csv"
+    meta = {
+        "members_at": guild.name,
+        "collected_at": datetime.now(JST).strftime("%Y/%m/%d %H:%M")
+    }
+    header = ["user_id", "display_name"]
+    rows = []
+    
+    async for member in guild.fetch_members(limit=None):
+        rows.append([member.id, member.display_name])
+    
+    make_csv(filename, meta, header, rows)
+    
+    # discordに送信
+    await interaction.followup.send(
+        content="メンバー一覧CSV",
+        file=discord.File(filename)
+    )
+    
 # Botを起動
 bot.run(os.getenv("DISCORD_TOKEN"))
