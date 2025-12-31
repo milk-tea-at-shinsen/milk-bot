@@ -403,6 +403,63 @@ async def export_vote_csv(interaction, result, msg_id, dt, mode):
     )
 
 #=====OCR関係の処理=====
+#---画像取得メッセージリストの作成---
+async def collect_message(channel, counts, minutes, start_msg, limit_msg, direction):
+        # 終了フラグをFalseに設定
+        end_flag = False
+        # 返信先メッセージをリストに格納
+        messages = [start_msg]
+        # 返信先メッセージをhistoryの最初の位置に設定
+        loop_start_msg = start_msg.id
+        # 件数指定なしまたは1未満の場合は1を設定
+        if counts is None or counts < 1:
+            counts = 1
+
+        # 終了フラグが立つまでループ
+        while end_flag is False:
+            if direction == "forward":
+                # historyの最初の位置より新しい100件分のメッセージを取得
+                m = await channel.history(after=loop_start_msg, limit=100).flatten()
+            else: # direction == "backward"
+                # historyの最初の位置より古い100件分のメッセージを取得
+                m = await channel.history(before=loop_start_msg, limit=100).flatten()
+
+            # 取得数が100件未満または累計が指定数以上なら終了
+            if len(m) < 100 or (len(messages) + len(m)) >= counts:
+                end_flag = True
+            # 終端メッセージに到達していたら終了、そうでなければ次のスタートを設定
+            else:
+                if direction == "forward":
+                    if m[0].id == limit_msg.id:
+                        end_flag = True
+                    else:
+                        loop_start_msg = m[0].id
+                else: # direction == "backward"
+                    if m[-1].id == limit_msg.id:
+                        end_flag = True
+                    else:
+                        loop_start_msg = m[-1].id
+            # リストに追加
+            messages.extend(m if not end_flag else m[:counts - len(messages)])
+
+        # リストを古い順にソート
+        messages.sort(key=lambda msg: msg.created_at)
+        # 件数でフィルタ
+        messages = messages[:counts]
+
+        if minutes:
+            # 時間指定がある場合、取得するメッセージの範囲を計算
+            if direction == "forward":
+                start_time = start_msg.created_at
+                end_time = start_time + timedelta(minutes=int(minutes))
+            else: # direction == "backward"
+                end_time = start_msg.created_at
+                start_time = end_time - timedelta(minutes=int(minutes))
+            # メッセージのタイムスタンプが範囲内ならリストに追加
+            msg_ids = [msg.id for msg in messages if start_time <= msg.created_at <= end_time]
+
+            return msg_ids
+
 #---行センター出し関数---
 def get_x_center(bounding_box):
     return sum(vertice.x for vertice in bounding_box.vertices) / 4
@@ -952,10 +1009,36 @@ async def export_members(interaction: discord.Interaction):
         content="メンバー一覧のCSVだよ(\*`･ω･)ゞ",
         file=discord.File(filename)
     )
-    
+
 #=====/table_ocr コマンド=====
-@bot.tree.context_menu(name="table_ocr",)
-async def table_ocr(interaction: discord.Interaction, message: discord.Message):
+@bot.tree.command(name="table_ocr", description="表の画像からCSVを作成するよ")
+@app_commands.describe(minutes = "時間指定(分)", counts = "件数指定(件)")
+async def table_ocr(interaction: discord.Interaction, minutes: str = None, counts: str = None):
+    await interaction.response.defer()
+
+    # 返信コマンド実行時
+    if interaction.data.resolved.messages:
+        # 返信先のメッセージの情報を取得
+        start_msg_id = next(iter(interaction.data.resolved.messages.values()), None)
+        start_msg = await interaction.channel.fetch_message(start_msg_id)
+        # チャンネルの最新メッセージを取得
+        limit_msg = await interaction.channel.fetch_message(interaction.channel.last_message_id)
+
+        msg_ids = collect_message(interaction.channel, counts, minutes, start_msg, limit_msg, "forward")
+
+    # 単独コマンド入力時
+    else:
+        # チャンネルの最新メッセージを取得
+        start_msg = await interaction.channel.fetch_message(interaction.channel.last_message_id)
+        # チャンネルの一番古いメッセージを取得
+        limit_msg = await interaction.channel.history(after=None, limit=1).flatten()
+        limit_msg = limit_msg[0]
+
+        msg_ids = collect_message(interaction.channel, counts, minutes, start_msg, limit_msg, "backward")
+
+#=====context_ocr コマンド=====
+@bot.tree.context_menu(name="context_ocr")
+async def context_ocr(interaction: discord.Interaction, message: discord.Message):
     await interaction.response.defer()
     
     if not message.attachments:
