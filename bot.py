@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 import os
 import json
 import emoji
+from enum import Enum
 
 # Botの準備
 intents = discord.Intents.default()
@@ -19,40 +20,58 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 #===================================
 # 定数・グローバル変数・辞書の準備
 #===================================
-# -----リマインダー辞書の読込-----
-def load_reminders():
+#=====辞書読込共通処理=====
+def load_data(data):
     # reminders.jsonが存在すれば
-    if os.path.exists("/mnt/reminders/reminders.json"):
+    if os.path.exists(f"/mnt/data/{data}.json"):
         #fileオブジェクト変数に格納
-        with open("/mnt/reminders/reminders.json", "r", encoding = "utf-8") as file:
-            load_data = json.load(file) 
-            #load_reminder関数の戻り値を設定
-            return {datetime.fromisoformat(key): value for key, value in load_data.items()}
-        print(f"辞書ファイルを読込完了: {datetime.now()}")
+        with open(f"/mnt/data/{data}.json", "r", encoding = "utf-8") as file:
+            print(f"辞書ファイルを読込完了: {datetime.now()} - {data}")
+            return json.load(file)
     else:
         #jsonが存在しない場合は、戻り値を空の辞書にする
         return {}
 
-# -----辞書を定義-----
-rmd_dt = {}
-#jsonファイルの内容または空の辞書
-reminders = load_reminders() 
+#=====各辞書定義=====
+#---リマインダー辞書---
+data_raw = load_data("reminders")
+if data_raw:
+    reminders = {datetime.fromisoformat(key): value for key, value in data_raw.items()}
+else:
+    reminders = {}
+
+#---投票辞書---
+data_raw = load_data("polls")
+if data_raw:
+    polls = {int(key): value for key, value in data_raw.items()}
+else:
+    polls = {}
 
 #===============
 # 共通処理関数
 #===============
-# -----辞書をjsonファイルに保存-----
-def export_reminders():
-    #remindersに値を代入するためグローバル宣言
-    global reminders
+#=====辞書をjsonファイルに保存=====
+def export_data(data: dict, name: str):
+    # 指定ディレクトリがなければ作成する
+    os.makedirs(f"/mnt/data", exist_ok=True)
     #jsonファイルを開く（存在しなければ作成する）
-    with open("/mnt/reminders/reminders.json", "w", encoding = "utf-8") as file:
-        # datetime形式をstr形式に変換してから保存
-        json.dump(
-            {dt.isoformat(): value for dt, value in reminders.items()}, file, ensure_ascii=False, indent=2) 
-    print(f"辞書ファイルを保存完了: {datetime.now()}")
+    with open(f"/mnt/data/{name}.json", "w", encoding = "utf-8") as file:
+        # jsonファイルを保存
+        json.dump(data, file, ensure_ascii=False, indent=2) 
+    print(f"辞書ファイルを保存完了: {datetime.now()} - {name}")
 
-# -----辞書への予定登録処理-----
+#=====jsonファイル保存前処理=====
+#---リマインダー---
+def save_reminders():
+    reminders_to_save = {dt.isoformat(): value for dt, value in reminders.items()}
+    export_data(reminders_to_save, "reminders")
+
+#---投票---
+def save_polls():
+    export_data(polls, "polls")
+
+#=====辞書への登録処理=====
+#---リマインダー---
 def add_reminder(dt, repeat, interval, channel_id, msg):
     # 日時が辞書になければ辞書に行を追加
     if dt not in reminders:
@@ -64,31 +83,117 @@ def add_reminder(dt, repeat, interval, channel_id, msg):
          "channel_id": channel_id,
          "msg": msg}
     )
-    export_reminders()
+    # json保存前処理
+    save_reminders()
 
-# -----リマインダーの削除-----
+#---投票---
+def add_poll(msg_id, question, options):
+    # 辞書に項目を登録
+    polls[msg_id] = {
+        "question": question,
+        "options": options
+    }
+
+    # json保存前処理
+    save_polls()
+
+#=====辞書からの削除処理=====
+#---リマインダー---
 def remove_reminder(dt, idx=None):
     # idxがNoneの場合は日時全体を削除、そうでなければ指定インデックスの行を削除
     if idx is None:
         if dt in reminders:
+            removed = reminders[dt]
             del reminders[dt]
-            export_reminders()
+            save_reminders()
             print(f"リマインダーを削除: {dt.strftime('%Y/%m/%d %H:%M')}")
-        return None
+            return removed
+        else:
+            print(f"削除対象のリマインダーがありません")
+            return None
     else:
-        removed = reminders[dt].pop(idx-1)
-        # 値が空の日時全体を削除
-        if not reminders[dt]:
-            del reminders[dt]
-        export_reminders()
-        print(f"リマインダーを削除: {dt.strftime('%Y/%m/%d %H:%M')} - {removed['msg']}")
-        return removed
+        if dt in reminders and 0 <= (idx-1) < len(reminders[dt]):
+            removed = reminders[dt].pop(idx-1)
+            # 値が空の日時全体を削除
+            if not reminders[dt]:
+                del reminders[dt]
+            save_reminders()
+            print(f"リマインダーを削除: {dt.strftime('%Y/%m/%d %H:%M')} - {removed['msg']}")
+            return removed
+        else:
+            print(f"削除対象のリマインダーがありません")
+            return None
 
-# 通知用ループ
+#---投票---
+def remove_poll(msg_id):
+    if msg_id in polls:
+        removed = polls[msg_id]
+        del polls[msg_id]
+        save_polls()
+        print(f"投票を削除: {removed['question']}")
+        return removed
+    else:
+        print(f"削除対象の投票がありません")
+        return None
+
+#=====UI選択後の処理=====
+#---リマインダー削除---
+async def handle_remove_reminder(interaction, dt, idx):
+        removed = remove_reminder(dt, idx)
+
+        # 削除完了メッセージの送信
+        await interaction.message.edit(
+            content=f"リマインダーを削除: {dt.strftime('%Y/%m/%d %H:%M')} - {removed['msg']}",
+            allowed_mentions=discord.AllowedMentions.none(),
+            view=None
+        )
+
+#---投票集計---
+async def make_poll_result(interaction, msg_id):
+    # 投票辞書を読み込み
+    options = polls[msg_id]["options"]
+    # メッセージを読み込み
+    message = await interaction.channel.fetch_message(msg_id)
+    # 結果用辞書を準備
+    result = {}
+    # 結果用辞書に結果を記録
+    for i, reaction in enumerate(message.reactions):
+        users = []
+        async for user in reaction.users():
+            if user != bot.user:
+                users.append(user.mention)
+        result[i] = {"emoji": reaction.emoji, "option":options[i], "count":len(users), "users":users}
+
+    return result
+
+#---投票結果表示---
+async def show_poll_result(interaction, result, msg_id):
+    # Embedで出力
+    embed = discord.Embed(
+        title=polls[msg_id]["question"],
+        description="投票結果",
+        color=discord.Color.green()
+    )
+    for i in result:
+        emoji = result[i]["emoji"]
+        option = result[i]["option"]
+        count = result[i]["count"]
+        users = result[i]["users"]
+        user_list = ", ".join(users) if users else "なし"
+        embed.add_field(name=f"{emoji} {option} - {count}人", value=f"メンバー: {user_list}", inline=False)
+    
+    await interaction.message.edit(
+        content="投票結果",
+        embed=embed,
+        allowed_mentions=discord.AllowedMentions.none(),
+        view=None
+    )
+
+#=====通知用ループ処理=====
 async def reminder_loop():
     await bot.wait_until_ready()
     while not bot.is_closed():
-                # 現在時刻を取得して次のゼロ秒までsleep
+        # 現在時刻を取得して次のゼロ秒までsleep
         now = datetime.now()
         next_minute = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
         wait = (next_minute - now).total_seconds()
@@ -125,20 +230,26 @@ async def reminder_loop():
 #===============
 # クラス定義
 #===============
+#=====リマインダー選択UIクラス=====
 class ReminderSelect(View):
     # クラスの初期設定
-    def __init__(self, reminders_dict):
+    def __init__(self, reminders):
         super().__init__()
-        # remindersプロパティにreminders_dictをセット
-        self.reminders = reminders_dict
+        # remindersプロパティにリマインダー辞書をセット
+        self.reminders = reminders
         
-        #削除選択リストの定義
+        #選択リストの定義
         options = []
-        for dt, values in reminders_dict.items():
+        # リマインダー辞書から日時と項目を分離
+        for dt, values in reminders.items():
+            # 同一日時内の項目区別用インデックスを作成
             for index, v in enumerate(values, start=1):
                 msg = v["msg"]
+                # 選択肢に表示される項目を設定
                 label = f"{dt.strftime('%Y/%m/%d %H:%M')} - {msg[:50]}"
+                # 選択時に格納される値を設定
                 value = f"{dt.isoformat()}|{index}"
+                # optionsリストに表示項目と値を格納
                 options.append(discord.SelectOption(label=label, value=value))
         
         #selectUIの定義
@@ -153,19 +264,62 @@ class ReminderSelect(View):
     # 削除処理の関数定義
     async def select_callback(self, interaction: discord.Interaction):
         value = interaction.data["values"][0]
+        # 日時とインデックスを分離
         dt_str, idx_str = value.split("|")
         dt = datetime.fromisoformat(dt_str)
         idx = int(idx_str)
 
         # 予定の削除
-        removed = remove_reminder(dt, idx)
+        handle_remove_reminder(interaction, dt, idx)
 
-        # 削除完了メッセージの送信
-        await interaction.message.edit(
-            content=f"リマインダーを削除: {dt.strftime('%Y/%m/%d %H:%M')} - {removed['msg']}",
-            allowed_mentions=discord.AllowedMentions.none(),
-            view=None
-        )
+#=====投票選択UIクラス=====
+class PollSelect(View):
+    # クラスの初期設定
+    def __init__(self, polls, mode):
+        super().__init__()
+        # pollsプロパティに投票辞書をセット
+        self.polls = polls
+        # modeプロパティに投票モードをセット
+        self.mode = mode
+
+        #選択リストの定義
+        options = []
+        # 投票辞書からメッセージidと項目を分離
+        for msg_id, v in polls.items():
+            question = v["question"]
+            # 選択肢に表示される項目を設定
+            label = f"{question[:50]}"
+            # 選択時に格納される値を設定
+            value = f"{msg_id}"
+            # optionsリストに表示項目と値を格納
+            options.append(discord.SelectOption(label=label, value=value))
+        
+        #selectUIの定義
+        if options:
+            select = Select(
+                placeholder="集計する投票を選択",
+                options = options
+            )
+            select.callback = self.select_callback
+            self.add_item(select)
+    
+    # 集計処理の関数定義
+    async def select_callback(self, interaction: discord.Interaction):
+        msg_id = int(interaction.data["values"][0])
+
+        # 集計処理
+        result = await make_poll_result(interaction, msg_id)
+        
+        # モード別処理
+        if self.mode == PollMode.SHOW_RESULT:
+            # 結果表示処理
+            await show_poll_result(interaction, result, msg_id)            
+
+#=====投票モード切替クラス=====
+class PollMode(Enum):
+    SHOW_RESULT = "show_result"
+    EXPORT_CSV = "export_csv"
+    DELETE_POLL = "delete_poll"
 
 #====================
 # イベントハンドラ
@@ -184,7 +338,7 @@ async def on_ready():
 #===============
 # コマンド定義
 #===============
-# /remind コマンド
+#=====/remind コマンド=====
 @bot.tree.command(name="remind", description="リマインダーをセットします")
 @app_commands.describe(
     date="日付(yyyy/mm/dd)",
@@ -215,7 +369,7 @@ async def remind(interaction: discord.Interaction, date: str, time: str, msg: st
     await interaction.response.send_message(f"{dt.strftime('%Y/%m/%d %H:%M')} にリマインダーをセットしました:saluting_face:")
     print(f"予定を追加: {reminders[dt]}")
 
-# /reminder_list コマンド
+#=====/reminder_list コマンド=====
 @bot.tree.command(name="reminder_list", description="リマインダーの一覧を表示します")
 async def reminder_list(interaction: discord.Interaction):
     # 空のリストを作成
@@ -242,7 +396,7 @@ async def reminder_list(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("リマインダーは設定されていません")
 
-# /reminder_delete コマンド
+#=====/reminder_delete コマンド=====
 @bot.tree.command(name="reminder_delete", description="リマインダー一覧を表示します")
 async def reminder_delete(interaction: discord.Interaction):
     # リマインダーが設定されている場合、選択メニューを表示
@@ -253,7 +407,7 @@ async def reminder_delete(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("リマインダーは設定されていません")
 
-# /poll コマンド
+#=====/poll コマンド=====
 @bot.tree.command(name="poll", description="投票を作成します")
 @app_commands.describe(
     question="質問",
@@ -292,7 +446,7 @@ async def poll(interaction: discord.Interaction,
     for i, opt in enumerate(options):
         if opt:
             description += f"{reactions[i]} {opt}\n"
-    embed = discord.Embed(title=question, description=description, color=discord.Color.blue())
+    embed = discord.Embed(title=question, description=description, color=discord.Color.green())
     await interaction.response.send_message(embed=embed)
     
     # リアクションを追加
@@ -300,6 +454,21 @@ async def poll(interaction: discord.Interaction,
     for i, opt in enumerate(options):
         if opt:
             await message.add_reaction(reactions[i])
+    
+    # 辞書に保存
+    add_poll(message.id, question, options)
+
+#=====/show_result コマンド=====
+@bot.tree.command(name="show_result", description="投票結果を表示します")
+async def show_result(interaction: discord.Interaction):
+    if polls:
+        view = PollSelect(polls, PollMode.SHOW_RESULT)
+        await interaction.response.send_message("結果表示する投票を選択", view=view)
+
+    # 投票がない場合のメッセージ
+    else:
+        await interaction.response.send_message("投票がありません")
+
 
 # Botを起動
 bot.run(os.getenv("DISCORD_TOKEN"))
