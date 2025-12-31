@@ -45,13 +45,28 @@ if data_raw:
     reminders = {datetime.fromisoformat(key): value for key, value in data_raw.items()}
 else:
     reminders = {}
+print(f"dict reminders: {reminders}")
 
 #---投票辞書---
-data_raw = load_data("polls")
+data_raw = load_data("votes")
 if data_raw:
-    polls = {int(key): value for key, value in data_raw.items()}
+    votes = {int(key): value for key, value in data_raw.items()}
 else:
-    polls = {}
+    votes = {}
+print(f"dict votes: {votes}")
+
+#---代理投票辞書---
+data_raw = load_data("proxy_votes")
+if data_raw:
+    msg_id, values = next(iter(data_raw.items()))
+    if "option" in values:
+        proxy_votes = {}
+    else:
+        proxy_votes = {int(key): value for key, value in data_raw.items()}
+else:
+    proxy_votes = {}
+print(f"dict proxy_votes: {proxy_votes}")
+
 
 #===============
 # 共通処理関数
@@ -73,9 +88,13 @@ def save_reminders():
     export_data(reminders_to_save, "reminders")
 
 #---投票---
-def save_polls():
-    export_data(polls, "polls")
+def save_votes():
+    export_data(votes, "votes")
 
+#---投票---
+def save_proxy_votes():
+    export_data(proxy_votes, "proxy_votes")
+    
 #=====辞書への登録処理=====
 #---リマインダー---
 def add_reminder(dt, repeat, interval, channel_id, msg):
@@ -93,15 +112,32 @@ def add_reminder(dt, repeat, interval, channel_id, msg):
     save_reminders()
 
 #---投票---
-def add_poll(msg_id, question, options):
+def add_vote(msg_id, question, reactions, options):
     # 辞書に項目を登録
-    polls[msg_id] = {
+    votes[msg_id] = {
         "question": question,
+        "reactions": reactions,
         "options": options
     }
 
     # json保存前処理
-    save_polls()
+    save_votes()
+
+#---代理投票---
+def add_proxy_votes(msg_id, voter, agent_id, opt_idx):
+    print("[start: add_proxy_votes]")
+    # msg_idが辞書になければ辞書に行を追加
+    if msg_id not in proxy_votes:
+        proxy_votes[msg_id] = {}
+    
+    # 辞書に項目を登録
+    proxy_votes[msg_id][voter] = {
+        "agent_id": agent_id,
+        "opt_idx": opt_idx
+    }
+
+    # json保存前処理
+    save_proxy_votes()
 
 #=====辞書からの削除処理=====
 #---リマインダー---
@@ -131,17 +167,44 @@ def remove_reminder(dt, idx=None):
             return None
 
 #---投票---
-def remove_poll(msg_id):
-    print("[start: remove_poll]")
-    if msg_id in polls:
-        removed = polls[msg_id]
-        del polls[msg_id]
-        save_polls()
+def remove_vote(msg_id):
+    print("[start: remove_vote]")
+    if msg_id in votes:
+        removed = votes[msg_id]
+        del votes[msg_id]
+        save_votes()
         print(f"投票を削除: {removed['question']}")
         return removed
     else:
         print(f"削除対象の投票がありません")
         return None
+        
+#---代理投票---
+def remove_proxy_vote(msg_id):
+    print("[start: remove_proxy_vote]")
+    if msg_id in proxy_votes:
+        removed = proxy_votes[msg_id]
+        del proxy_votes[msg_id]
+        save_proxy_votes()
+        print(f"代理投票({msg_id})を削除しました")
+        return removed
+    else:
+        print(f"削除対象の代理投票がありません")
+        return None
+
+#---代理投票(個別投票キャンセル)---
+def cancel_proxy_vote(msg_id, voter, agent_id):
+    print("[start: cancel_proxy_vote]")
+    if msg_id in proxy_votes:
+        for key, value in proxy_votes[msg_id].items():
+            if (key, value["agent_id"]) == (voter, agent_id):
+                removed = proxy_votes[msg_id][voter]
+                del proxy_votes[msg_id][voter]
+                print(f"{voter}の代理投票({msg_id})をキャンセルしました")
+                return removed
+            else:
+                print(f"キャンセル対象の代理投票がありません")
+                return None
 
 #=====UI選択後の処理=====
 #---リマインダー削除---
@@ -156,39 +219,65 @@ async def handle_remove_reminder(interaction, dt, idx):
         )
 
 #---投票集計---
-async def make_poll_result(interaction, msg_id):
-    print("[start: make_poll_result]")
+async def make_vote_result(interaction, msg_id):
+    print("[start: make_vote_result]")
     # 投票辞書を読み込み
-    options = polls[msg_id]["options"]
+    options = votes[msg_id]["options"]
     # メッセージを読み込み
     message = await interaction.channel.fetch_message(msg_id)
+    # サーバー情報を読み込み
+    guild = interaction.guild
+    
     # 結果用辞書を準備
     result = {}
     # 結果用辞書に結果を記録
     for i, reaction in enumerate(message.reactions):
         users = []
         display_names = []
+        
+        # リアクション投票分
         async for user in reaction.users():
             if user != bot.user:
                 users.append(user.mention)
                 display_names.append(user.display_name)
+        
+        # 代理投票分
+        if msg_id in proxy_votes:
+            for voter, values in proxy_votes[msg_id].items():
+                for opt_idx in values["opt_idx"]:
+                    if opt_idx == i:
+                        agent_id = values["agent_id"]
+                        agent = guild.get_member(agent_id)
+                        if agent is None:
+                            try:
+                                agent = await guild.fetch_member(agent_id)
+                            except:
+                                agent = None
+                        if agent:
+                            agent_display_name = agent.display_name
+                        else:
+                            agent_display_name = "None"
+                        
+                        users.append(f"{voter}(by{agent_display_name})")
+                        display_names.append(f"{voter}(by{agent_display_name})")
+            
         result[i] = {
             "emoji": reaction.emoji,
-            "option":options[i],
-            "count":len(users),
-            "users":users,
+            "option": options[i],
+            "count": len(users),
+            "users": users,
             "display_names": display_names
         }
     dt = datetime.now(JST)
     return dt, result
 
 #---投票結果表示---
-async def show_poll_result(interaction, dt, result, msg_id, mode):
-    print("[start: show_poll_result]")
+async def show_vote_result(interaction, dt, result, msg_id, mode):
+    print("[start: show_vote_result]")
     # Embedの設定
     embed = discord.Embed(
         title="投票結果",
-        description=polls[msg_id]["question"],
+        description=votes[msg_id]["question"],
         color=discord.Color.green()
     )
     # 投票結果からフィールドを作成
@@ -278,10 +367,10 @@ def make_csv(filename, meta, header, rows):
         writer.writerows(rows)
 
 #---投票結果CSV出力処理---
-async def export_poll_csv(interaction, result, msg_id, dt, mode):
-    print("[start: export_poll_csv]")
+async def export_vote_csv(interaction, result, msg_id, dt, mode):
+    print("[start: export_vote_csv]")
     meta = {
-        "question": polls[msg_id]["question"],
+        "question": votes[msg_id]["question"],
         "status": mode,
         "collected_at": dt.strftime("%Y/%m/%d %H:%M")
     }
@@ -298,7 +387,7 @@ async def export_poll_csv(interaction, result, msg_id, dt, mode):
     
     # discordに送信
     await interaction.followup.send(
-        content="集計結果CSV",
+        content="投票集計結果のCSVだよ(\*`･ω･)ゞ",
         files=[discord.File(grouped_file), discord.File(listed_file)]
     )
 
@@ -368,7 +457,7 @@ class ReminderSelect(View):
         #selectUIの定義
         if options:
             select = Select(
-                placeholder="削除するリマインダーを選択",
+                placeholder="削除するリマインダーを選んでね",
                 options = options
             )
             select.callback = self.select_callback
@@ -386,19 +475,23 @@ class ReminderSelect(View):
         await handle_remove_reminder(interaction, dt, idx)
 
 #=====投票選択UIクラス=====
-class PollSelect(View):
+class VoteSelect(View):
     # クラスの初期設定
-    def __init__(self, polls, mode):
+    def __init__(self, votes, mode, voter=None, agent_id=None):
         super().__init__()
-        # pollsプロパティに投票辞書をセット
-        self.polls = polls
+        # votesプロパティに投票辞書をセット
+        self.votes = votes
         # modeプロパティに投票モードをセット
         self.mode = mode
+        # voterプロパティに投票者名をセット
+        self.voter = voter
+        # agentプロパティに代理人をセット
+        self.agent_id = agent_id
 
         #選択リストの定義
         options = []
         # 投票辞書からメッセージidと項目を分離
-        for msg_id, v in polls.items():
+        for msg_id, v in votes.items():
             question = v["question"]
             # 選択肢に表示される項目を設定
             label = f"{question[:50]}"
@@ -409,39 +502,114 @@ class PollSelect(View):
         
         #selectUIの定義
         if options:
-            select = Select(
-                placeholder="集計する投票を選択",
-                options = options
-            )
+            if mode == VoteSelectMode.PROXY_VOTE:
+                select = Select(
+                    placeholder="代理投票する投票を選んでね",
+                    options = options
+                )
+            else:
+                select = Select(
+                    placeholder="集計する投票を選んでね",
+                    options = options
+                )
             select.callback = self.select_callback
             self.add_item(select)
     
-    # 集計処理の関数定義
+    # 投票選択後処理の関数定義
     async def select_callback(self, interaction: discord.Interaction):
         await interaction.response.defer()
         msg_id = int(interaction.data["values"][0])
 
-        # 集計処理
-        dt, result = await make_poll_result(interaction, msg_id)
-        
-        # 結果表示処理
-        if self.mode == PollResultMode.MID_RESULT:
-            mode = "mid"
+        # 代理投票と集計で処理を分岐
+        if self.mode == VoteSelectMode.PROXY_VOTE:
+            # 代理投票処理
+            view = VoteOptionSelect(msg_id, self.voter, self.agent_id)
+            await interaction.followup.send("代理投票する選択肢を選んでね", view=view)
+        # 代理投票キャンセル
+        elif self.mode == VoteSelectMode.CANCEL_PROXY_VOTE:
+            removed = cancel_proxy_vote(msg_id, self.voter, self.agent_id)
+            if removed:
+                await interaction.followup.send(f"**{self.voter}** の分の代理投票を取り消したよ(\*`･ω･)ゞ")
+            else:
+                await interaction.followup.send(f"取り消せる代理投票がないみたい(´･ω･`)")
         else:
-            mode = "final"
-        await show_poll_result(interaction, dt, result, msg_id, mode)
+            # 集計処理
+            dt, result = await make_vote_result(interaction, msg_id)
+            
+            # 結果表示処理
+            if self.mode == VoteSelectMode.MID_RESULT:
+                mode = "mid"
+            else:
+                mode = "final"
+            await show_vote_result(interaction, dt, result, msg_id, mode)
+            
+            # CSV作成処理
+            await export_vote_csv(interaction, result, msg_id, dt, mode)
+            
+            # 投票辞書からの削除
+            if self.mode == VoteSelectMode.FINAL_RESULT:
+                remove_vote(msg_id)
+                remove_proxy_vote(msg_id)
+
+#=====投票選択肢選択UIクラス=====
+class VoteOptionSelect(View):
+    # クラスの初期設定
+    def __init__(self, msg_id, voter, agent_id):
+        super().__init__()
+        # votesプロパティに投票辞書をセット
+        self.votes = votes
+        # msg_idプロパティにメッセージIDをセット
+        self.msg_id = msg_id
+        # voterプロパティに投票者名をセット
+        self.voter = voter
+        # agentプロパティに代理人をセット
+        self.agent_id = agent_id
+
+        #選択リストの定義
+        options = []
+        # 投票辞書からメッセージidと項目を分離
+        for i, (reaction, opt) in enumerate(zip(votes[msg_id]["reactions"], votes[msg_id]["options"])):
+            option = opt or ""
+            # 選択肢に表示される項目を設定
+            label = f"{reaction} {option[:50]}"
+            # 選択時に格納される値を設定
+            value = str(i)
+            
+            # optionsリストに表示項目と値を格納
+            if option != "":
+                options.append(discord.SelectOption(label=label, value=value))
         
-        # CSV作成処理
-        await export_poll_csv(interaction, result, msg_id, dt, mode)
+        # selectUIの定義
+        if options:
+            select = Select(
+                placeholder="代理投票する選択肢を選んでね",
+                min_values = 1,
+                max_values = len(options),
+                options = options
+            )
+            select.callback = self.select_callback
+            self.add_item(select)
+
+    # 選択肢選択後の関数定義
+    async def select_callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        guild = interaction.guild
         
-        # 投票辞書からの削除
-        if self.mode == PollResultMode.FINAL_RESULT:
-            remove_poll(msg_id)
+        opt_idx = []
+        for opt_str in interaction.data["values"]:
+            opt_idx.append(int(opt_str))
+        
+        add_proxy_votes(self.msg_id, self.voter, self.agent_id, opt_idx)
+        agent = guild.get_member(self.agent_id)
+        agent_display_name = agent.display_name
+        await interaction.followup.send(f"**{agent_display_name}** から **{self.voter}** の分の投票を受け付けたよ(\*`･ω･)ゞ")
 
 #=====集計モード切替クラス=====
-class PollResultMode(Enum):
+class VoteSelectMode(Enum):
     MID_RESULT = "mid_result"
     FINAL_RESULT = "final_result"
+    PROXY_VOTE = "proxy_vote"
+    CANCEL_PROXY_VOTE = "cancel_proxy_vote"
 
 #====================
 # イベントハンドラ
@@ -461,7 +629,7 @@ async def on_ready():
 # コマンド定義
 #===============
 #=====/remind コマンド=====
-@bot.tree.command(name="remind", description="リマインダーをセットします")
+@bot.tree.command(name="remind", description="リマインダーをセットするよ")
 @app_commands.describe(
     date="日付(yyyy/mm/dd)",
     time="時刻(hh:mm)",
@@ -488,11 +656,11 @@ async def remind(interaction: discord.Interaction, date: str, time: str, msg: st
     # add_reminder関数に渡す
     add_reminder(dt, repeat, interval, channel_id, msg)
 
-    await interaction.response.send_message(f"{dt.strftime('%Y/%m/%d %H:%M')} にリマインダーをセットしました:saluting_face:")
+    await interaction.response.send_message(f"**{dt.strftime('%Y/%m/%d %H:%M')}** にリマインダーをセットしたよ(\*`･ω･)ゞ")
     print(f"予定を追加: {reminders[dt]}")
 
 #=====/reminder_list コマンド=====
-@bot.tree.command(name="reminder_list", description="リマインダーの一覧を表示します")
+@bot.tree.command(name="reminder_list", description="リマインダーの一覧を表示するよ")
 async def reminder_list(interaction: discord.Interaction):
     # 空のリストを作成
     items = []
@@ -517,35 +685,35 @@ async def reminder_list(interaction: discord.Interaction):
         await interaction.response.send_message(embed=embed)
     # リマインダーが設定されていない場合のメッセージ
     else:
-        await interaction.response.send_message("リマインダーは設定されていません")
+        await interaction.response.send_message("設定されているリマインダーがないみたい(´･ω･`)")
 
 #=====/reminder_delete コマンド=====
-@bot.tree.command(name="reminder_delete", description="リマインダー一覧を表示します")
+@bot.tree.command(name="reminder_delete", description="リマインダーを削除するよ")
 async def reminder_delete(interaction: discord.Interaction):
     # リマインダーが設定されている場合、選択メニューを表示
     if reminders:
         view = ReminderSelect(reminders)
-        await interaction.response.send_message("削除するリマインダーを選択", view=view)
+        await interaction.response.send_message("削除するリマインダーを選んでね", view=view)
     # リマインダーが設定されていない場合のメッセージ
     else:
-        await interaction.response.send_message("リマインダーは設定されていません")
+        await interaction.response.send_message("設定されているリマインダーがないみたい(´･ω･`)")
 
-#=====/poll コマンド=====
-@bot.tree.command(name="poll", description="投票を作成します")
+#=====/vote コマンド=====
+@bot.tree.command(name="vote", description="投票を作成するよ")
 @app_commands.describe(
-    question="質問",
-    opt_1="選択肢1",
-    opt_2="選択肢2",
-    opt_3="選択肢3",
-    opt_4="選択肢4",
-    opt_5="選択肢5",
-    opt_6="選択肢6",
-    opt_7="選択肢7",
-    opt_8="選択肢8",
-    opt_9="選択肢9",
-    opt_10="選択肢10",
+    question="質問を書いてね",
+    opt_1="1番目の選択肢を書いてね",
+    opt_2="2番目の選択肢を書いてね",
+    opt_3="3番目の選択肢を書いてね",
+    opt_4="4番目の選択肢を書いてね",
+    opt_5="5番目の選択肢を書いてね",
+    opt_6="6番目の選択肢を書いてね",
+    opt_7="7番目の選択肢を書いてね",
+    opt_8="8番目の選択肢を書いてね",
+    opt_9="9番目の選択肢を書いてね",
+    opt_10="10番目の選択肢を書いてね",
 )
-async def poll(interaction: discord.Interaction,
+async def vote(interaction: discord.Interaction,
      question: str, opt_1: str, opt_2: str=None, opt_3: str=None, opt_4: str=None, opt_5: str=None,
      opt_6: str=None, opt_7: str=None, opt_8: str=None, opt_9: str=None, opt_10: str=None): 
     # 選択肢をリストに格納
@@ -579,32 +747,54 @@ async def poll(interaction: discord.Interaction,
             await message.add_reaction(reactions[i])
     
     # 辞書に保存
-    add_poll(message.id, question, options)
+    add_vote(message.id, question, reactions, options)
 
-#=====/poll_result コマンド=====
-@bot.tree.command(name="poll_result", description="投票結果を表示します")
+#=====/vote_result コマンド=====
+@bot.tree.command(name="vote_result", description="投票結果を表示するよ")
 @app_commands.describe(mode="集計モード")
 @app_commands.choices(mode=[
     app_commands.Choice(name="中間集計", value="mid"),
     app_commands.Choice(name="最終結果", value="final")
 ])
-async def poll_result(interaction: discord.Interaction, mode: str):
-    if polls:
+async def vote_result(interaction: discord.Interaction, mode: str):
+    if votes:
         if mode == "mid":
-            view = PollSelect(polls, PollResultMode.MID_RESULT)
-            await interaction.response.send_message("結果表示する投票を選択", view=view)
+            view = VoteSelect(votes=votes, mode=VoteSelectMode.MID_RESULT, voter=None, agent_id=None)
+            await interaction.response.send_message("どの投票結果を表示するか選んでね", view=view)
         elif mode == "final":
-            view = PollSelect(polls, PollResultMode.FINAL_RESULT)
-            await interaction.response.send_message("結果表示する投票を選択", view=view)
+            view = VoteSelect(votes=votes, mode=VoteSelectMode.FINAL_RESULT, voter=None, agent_id=None)
+            await interaction.response.send_message("どの投票結果を表示するか選んでね", view=view)
         else:
-            await interaction.response.send_message("集計モードの指定が不正です")
+            await interaction.response.send_message("選択モードの指定がおかしいみたい(´･ω･`)")
 
     # 投票がない場合のメッセージ
     else:
-        await interaction.response.send_message("投票がありません")
+        await interaction.response.send_message("集計できる投票がないみたい(´･ω･`)")
+
+#=====/proxy_vote コマンド=====
+@bot.tree.command(name="proxy_vote", description="本人の代わりに代理投票するよ")
+@app_commands.describe(voter = "投票する本人の名前を書いてね")
+async def proxy_vote(interaction: discord.Interaction, voter: str):
+    if votes:
+        agent_id = interaction.user.id
+        view = VoteSelect(votes=votes, mode=VoteSelectMode.PROXY_VOTE, voter=voter, agent_id=agent_id)
+        await interaction.response.send_message("どの投票に代理投票するか選んでね", view=view)
+    else:
+        await interaction.response.send_message("代理投票できる投票がないみたい(´･ω･`)")
+
+#=====/cancel_proxy コマンド=====
+@bot.tree.command(name="cancel_proxy", description="投票済みの代理投票を取り消すよ")
+@app_commands.describe(voter = "投票者名")
+async def cancel_proxy(interaction: discord.Interaction, voter: str):
+    if votes:
+        agent_id = interaction.user.id
+        view = VoteSelect(votes=votes, mode=VoteSelectMode.CANCEL_PROXY_VOTE, voter=voter, agent_id=agent_id)
+        await interaction.response.send_message("代理投票を取り消しする投票を選んでね", view=view)
+    else:
+        await interaction.response.send_message("取り消しできる投票がないみたい(´･ω･`)")
 
 #=====/export_members コマンド=====
-@bot.tree.command(name="export_members", description="メンバーリストを出力します")
+@bot.tree.command(name="export_members", description="サーバーのメンバーリストを出力するよ")
 async def export_members(interaction: discord.Interaction):
     await interaction.response.defer()
     guild = interaction.guild
@@ -624,7 +814,7 @@ async def export_members(interaction: discord.Interaction):
     
     # discordに送信
     await interaction.followup.send(
-        content="メンバー一覧CSV",
+        content="メンバー一覧のCSVだよ(\*`･ω･)ゞ",
         file=discord.File(filename)
     )
     
