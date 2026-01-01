@@ -30,7 +30,6 @@ client = vision.ImageAnnotatorClient(credentials=credentials)
 #===================================
 # 定数・グローバル変数・辞書の準備
 #===================================
-
 #=====タイムゾーンの指定=====
 JST = timezone(timedelta(hours=9), "JST")
 
@@ -79,6 +78,9 @@ print(f"dict proxy_votes: {proxy_votes}")
 #===============
 # 共通処理関数
 #===============
+#---------------
+# 辞書関係
+#---------------
 #=====辞書をjsonファイルに保存=====
 def export_data(data: dict, name: str):
     # 指定ディレクトリがなければ作成する
@@ -215,8 +217,13 @@ def cancel_proxy_vote(msg_id, voter, agent_id):
                 print(f"キャンセル対象の代理投票がありません")
                 return None
 
-#=====UI選択後の処理=====
-#---リマインダー削除---
+#===============
+# 個別処理関数
+#===============
+#---------------
+# リマインダー関係
+#---------------
+#=====リマインダー削除=====
 async def handle_remove_reminder(interaction, dt, idx):
         removed = remove_reminder(dt, idx)
 
@@ -227,7 +234,48 @@ async def handle_remove_reminder(interaction, dt, idx):
             view=None
         )
 
-#---投票集計---
+#=====通知用ループ処理=====
+async def reminder_loop():
+    await bot.wait_until_ready()
+    while not bot.is_closed():
+        # 現在時刻を取得して次のゼロ秒までsleep
+        now = datetime.now(JST)
+        next_minute = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
+        wait = (next_minute - now).total_seconds()
+        await asyncio.sleep(wait)
+
+        # 辞書に該当時刻が登録されていた場合
+        if next_minute in reminders:
+            # 該当行を取り出してラベル付きリストに代入し値を取り出す
+            for rmd_dt in reminders[next_minute]:
+                channel_id = rmd_dt["channel_id"]
+                repeat = rmd_dt["repeat"]
+                interval = rmd_dt["interval"]
+                msg = rmd_dt["msg"]
+                channel = bot.get_channel(channel_id)
+                if channel:
+                    await channel.send(f"{msg}")
+                    print (f"チャンネルにメッセージを送信: {datetime.now(JST)}")
+                else:
+                    print(f"チャンネル取得失敗: {channel_id}")
+            
+                # 繰り返し予定の登録
+                if repeat:
+                    if repeat == "day":
+                        dt = next_minute + timedelta(days=interval)
+                    elif repeat == "hour":
+                        dt = next_minute + timedelta(hours=interval)
+                    elif repeat == "minute":
+                        dt = next_minute + timedelta(minutes=interval)
+                    add_reminder(dt, repeat, interval, channel_id, msg)
+            
+            # 処理済の予定の削除
+            remove_reminder(next_minute)
+
+#---------------
+# 投票関係
+#---------------
+#=====投票集計=====
 async def make_vote_result(interaction, msg_id):
     print("[start: make_vote_result]")
     # 投票辞書を読み込み
@@ -284,7 +332,7 @@ async def make_vote_result(interaction, msg_id):
     dt = datetime.now(JST)
     return dt, result
 
-#---投票結果表示---
+#=====投票結果表示=====
 async def show_vote_result(interaction, dt, result, msg_id, mode):
     print("[start: show_vote_result]")
     # Embedの設定
@@ -315,7 +363,7 @@ async def show_vote_result(interaction, dt, result, msg_id, mode):
         view=None
     )
 
-#---投票結果rows作成処理(選択肢グループ)---
+#=====投票結果rows作成処理(選択肢グループ)=====
 def make_grouped_rows(result):
     print("[start: make_grouprd_rows]")
     # 空のリストを用意
@@ -349,7 +397,7 @@ def make_grouped_rows(result):
     
     return header, rows
 
-#---投票結果rows作成処理(一覧)---
+#=====投票結果rows作成処理(一覧)=====
 def make_listed_rows(result):
     print("[start: make_listed_rows]")
     header = ["option", "users"]
@@ -362,7 +410,7 @@ def make_listed_rows(result):
     
     return header, rows
 
-#---CSV作成処理---
+#=====CSV作成処理=====
 def make_csv(filename, rows, meta=None, header=None):
     print("[start: make_csv]")
     with open(filename, "w", newline="", encoding="utf-8-sig") as f:
@@ -377,7 +425,7 @@ def make_csv(filename, rows, meta=None, header=None):
         # rowsの書込
         writer.writerows(rows)
 
-#---投票結果CSV出力処理---
+#=====投票結果CSV出力処理=====
 async def export_vote_csv(interaction, result, msg_id, dt, mode):
     print("[start: export_vote_csv]")
     meta = {
@@ -398,12 +446,14 @@ async def export_vote_csv(interaction, result, msg_id, dt, mode):
     
     # discordに送信
     await interaction.followup.send(
-        content="投票集計結果のCSVだよ(\*`･ω･)ゞ",
+        content="投票集計結果のCSVだよ🫡",
         files=[discord.File(grouped_file), discord.File(listed_file)]
     )
 
-#=====OCR関係の処理=====
-#---画像取得メッセージリストの作成---
+#---------------
+# OCR関係
+#---------------
+#=====画像取得メッセージリストの作成=====
 async def collect_message(channel, counts, minutes, start_msg, limit_msg, direction):
         # 終了フラグをFalseに設定
         end_flag = False
@@ -460,6 +510,7 @@ async def collect_message(channel, counts, minutes, start_msg, limit_msg, direct
 
             return msg_ids
 
+#=====文字座標計算=====
 #---行センター出し関数---
 def get_x_center(bounding_box):
     return sum(vertice.x for vertice in bounding_box.vertices) / 4
@@ -472,7 +523,7 @@ def get_y_center(bounding_box):
 def get_height(bounding_box):
     return max(vertice.y for vertice in bounding_box.vertices) - min(vertice.y for vertice in bounding_box.vertices)
 
-#---symbol取得処理---
+#=====symbol取得処理=====
 def get_symbols(response):
     print("[start: get_symbols]")
     symbols = [{
@@ -489,6 +540,7 @@ def get_symbols(response):
     ]
     return symbols
 
+#=====同一行列判定=====
 #---行作成処理---
 def cluster_lines(symbols, avr_height):
     print("[start: cluster_lines]")
@@ -546,6 +598,7 @@ def cluster_rows(lines, avr_height):
             prev_x = None
     return rows
 
+#=====表整形処理=====
 #---最頻列数を取得---
 def get_mode_columns(rows):
     col_counts = [len(row) for row in rows]
@@ -559,7 +612,7 @@ def extract_table_body(rows):
     table_body = [row for row in rows if len(row) + 1 >= mode_columns]
     return table_body
 
-#---OCR->CSV用データ整形処理---
+#=====OCR->CSV用データ作成処理=====
 def extract_table_from_image(image_content):
     image = vision.Image(content=image_content)
     response = client.document_text_detection(image=image)
@@ -579,7 +632,7 @@ def extract_table_from_image(image_content):
         rows = extract_table_body(rows)
         return rows
 
-#---重複行削除処理---
+#=====重複行削除処理=====
 def remove_duplicate_rows(rows):
     print("[start: remove_duplicate_rows]")
     unique_rows = []
@@ -587,49 +640,14 @@ def remove_duplicate_rows(rows):
         if row not in unique_rows:
             unique_rows.append(row)
     return unique_rows
-    
-#=====通知用ループ処理=====
-async def reminder_loop():
-    await bot.wait_until_ready()
-    while not bot.is_closed():
-        # 現在時刻を取得して次のゼロ秒までsleep
-        now = datetime.now(JST)
-        next_minute = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
-        wait = (next_minute - now).total_seconds()
-        await asyncio.sleep(wait)
-
-        # 辞書に該当時刻が登録されていた場合
-        if next_minute in reminders:
-            # 該当行を取り出してラベル付きリストに代入し値を取り出す
-            for rmd_dt in reminders[next_minute]:
-                channel_id = rmd_dt["channel_id"]
-                repeat = rmd_dt["repeat"]
-                interval = rmd_dt["interval"]
-                msg = rmd_dt["msg"]
-                channel = bot.get_channel(channel_id)
-                if channel:
-                    await channel.send(f"{msg}")
-                    print (f"チャンネルにメッセージを送信: {datetime.now(JST)}")
-                else:
-                    print(f"チャンネル取得失敗: {channel_id}")
-            
-                # 繰り返し予定の登録
-                if repeat:
-                    if repeat == "day":
-                        dt = next_minute + timedelta(days=interval)
-                    elif repeat == "hour":
-                        dt = next_minute + timedelta(hours=interval)
-                    elif repeat == "minute":
-                        dt = next_minute + timedelta(minutes=interval)
-                    add_reminder(dt, repeat, interval, channel_id, msg)
-            
-            # 処理済の予定の削除
-            remove_reminder(next_minute)
 
 #===============
 # クラス定義
 #===============
-#=====リマインダー選択UIクラス=====
+#---------------
+# リマインダー関係
+#---------------
+#=====リマインダー選択=====
 class ReminderSelect(View):
     # クラスの初期設定
     def __init__(self, reminders):
@@ -671,7 +689,10 @@ class ReminderSelect(View):
         # 予定の削除
         await handle_remove_reminder(interaction, dt, idx)
 
-#=====投票選択UIクラス=====
+#---------------
+# 投票関係
+#---------------
+#=====投票選択=====
 class VoteSelect(View):
     # クラスの初期設定
     def __init__(self, votes, mode, voter=None, agent_id=None):
@@ -726,9 +747,9 @@ class VoteSelect(View):
         elif self.mode == VoteSelectMode.CANCEL_PROXY_VOTE:
             removed = cancel_proxy_vote(msg_id, self.voter, self.agent_id)
             if removed:
-                await interaction.followup.send(f"**{self.voter}** の分の代理投票を取り消したよ(\*`･ω･)ゞ")
+                await interaction.followup.send(f"**{self.voter}** の分の代理投票を取り消したよ🫡")
             else:
-                await interaction.followup.send(f"取り消せる代理投票がないみたい(´･ω･`)")
+                await interaction.followup.send(f"取り消せる代理投票がないみたい🥺")
         else:
             # 集計処理
             dt, result = await make_vote_result(interaction, msg_id)
@@ -748,7 +769,7 @@ class VoteSelect(View):
                 remove_vote(msg_id)
                 remove_proxy_vote(msg_id)
 
-#=====投票選択肢選択UIクラス=====
+#=====投票選択肢選択=====
 class VoteOptionSelect(View):
     # クラスの初期設定
     def __init__(self, msg_id, voter, agent_id):
@@ -797,9 +818,9 @@ class VoteOptionSelect(View):
         add_proxy_votes(self.msg_id, self.voter, self.agent_id, opt_idx)
         agent = guild.get_member(self.agent_id)
         agent_display_name = agent.display_name
-        await interaction.followup.send(f"**{agent_display_name}** から **{self.voter}** の分の投票を受け付けたよ(\*`･ω･)ゞ")
+        await interaction.followup.send(f"**{agent_display_name}** から **{self.voter}** の分の投票を受け付けたよ🫡")
 
-#=====集計モード切替クラス=====
+#=====集計モード切替=====
 class VoteSelectMode(Enum):
     MID_RESULT = "mid_result"
     FINAL_RESULT = "final_result"
@@ -823,6 +844,9 @@ async def on_ready():
 #===============
 # コマンド定義
 #===============
+#---------------
+# リマインダー関係
+#---------------
 #=====/remind コマンド=====
 @bot.tree.command(name="remind", description="リマインダーをセットするよ")
 @app_commands.describe(
@@ -851,7 +875,7 @@ async def remind(interaction: discord.Interaction, date: str, time: str, msg: st
     # add_reminder関数に渡す
     add_reminder(dt, repeat, interval, channel_id, msg)
 
-    await interaction.response.send_message(f"**{dt.strftime('%Y/%m/%d %H:%M')}** にリマインダーをセットしたよ(\*`･ω･)ゞ")
+    await interaction.response.send_message(f"**{dt.strftime('%Y/%m/%d %H:%M')}** にリマインダーをセットしたよ🫡")
     print(f"予定を追加: {reminders[dt]}")
 
 #=====/reminder_list コマンド=====
@@ -880,7 +904,7 @@ async def reminder_list(interaction: discord.Interaction):
         await interaction.response.send_message(embed=embed)
     # リマインダーが設定されていない場合のメッセージ
     else:
-        await interaction.response.send_message("設定されているリマインダーがないみたい(´･ω･`)")
+        await interaction.response.send_message("設定されているリマインダーがないみたい🥺")
 
 #=====/reminder_delete コマンド=====
 @bot.tree.command(name="reminder_delete", description="リマインダーを削除するよ")
@@ -891,8 +915,11 @@ async def reminder_delete(interaction: discord.Interaction):
         await interaction.response.send_message("削除するリマインダーを選んでね", view=view)
     # リマインダーが設定されていない場合のメッセージ
     else:
-        await interaction.response.send_message("設定されているリマインダーがないみたい(´･ω･`)")
+        await interaction.response.send_message("設定されているリマインダーがないみたい🥺")
 
+#---------------
+# 投票関係
+#---------------
 #=====/vote コマンド=====
 @bot.tree.command(name="vote", description="投票を作成するよ")
 @app_commands.describe(
@@ -960,11 +987,11 @@ async def vote_result(interaction: discord.Interaction, mode: str):
             view = VoteSelect(votes=votes, mode=VoteSelectMode.FINAL_RESULT, voter=None, agent_id=None)
             await interaction.response.send_message("どの投票結果を表示するか選んでね", view=view)
         else:
-            await interaction.response.send_message("選択モードの指定がおかしいみたい(´･ω･`)")
+            await interaction.response.send_message("選択モードの指定がおかしいみたい🥺")
 
     # 投票がない場合のメッセージ
     else:
-        await interaction.response.send_message("集計できる投票がないみたい(´･ω･`)")
+        await interaction.response.send_message("集計できる投票がないみたい🥺")
 
 #=====/proxy_vote コマンド=====
 @bot.tree.command(name="proxy_vote", description="本人の代わりに代理投票するよ")
@@ -975,7 +1002,7 @@ async def proxy_vote(interaction: discord.Interaction, voter: str):
         view = VoteSelect(votes=votes, mode=VoteSelectMode.PROXY_VOTE, voter=voter, agent_id=agent_id)
         await interaction.response.send_message("どの投票に代理投票するか選んでね", view=view)
     else:
-        await interaction.response.send_message("代理投票できる投票がないみたい(´･ω･`)")
+        await interaction.response.send_message("代理投票できる投票がないみたい🥺")
 
 #=====/cancel_proxy コマンド=====
 @bot.tree.command(name="cancel_proxy", description="投票済みの代理投票を取り消すよ")
@@ -986,8 +1013,11 @@ async def cancel_proxy(interaction: discord.Interaction, voter: str):
         view = VoteSelect(votes=votes, mode=VoteSelectMode.CANCEL_PROXY_VOTE, voter=voter, agent_id=agent_id)
         await interaction.response.send_message("代理投票を取り消しする投票を選んでね", view=view)
     else:
-        await interaction.response.send_message("取り消しできる投票がないみたい(´･ω･`)")
+        await interaction.response.send_message("取り消しできる投票がないみたい🥺")
 
+#---------------
+# メンバーリスト関係
+#---------------
 #=====/export_members コマンド=====
 @bot.tree.command(name="export_members", description="サーバーのメンバーリストを出力するよ")
 async def export_members(interaction: discord.Interaction):
@@ -1006,10 +1036,13 @@ async def export_members(interaction: discord.Interaction):
     
     # discordに送信
     await interaction.followup.send(
-        content="メンバー一覧のCSVだよ(\*`･ω･)ゞ",
+        content="メンバー一覧のCSVだよ🫡",
         file=discord.File(filename)
     )
 
+#---------------
+# OCR関係
+#---------------
 #=====/table_ocr コマンド=====
 @bot.tree.command(name="table_ocr", description="表の画像からCSVを作成するよ")
 @app_commands.describe(minutes = "時間指定(分)", counts = "件数指定(件)")
@@ -1042,7 +1075,7 @@ async def context_ocr(interaction: discord.Interaction, message: discord.Message
     await interaction.response.defer()
     
     if not message.attachments:
-        await interaction.response.send("画像が添付されてないよ(´･ω･`)")
+        await interaction.response.send("画像が添付されてないよ🥺")
         return
 
     # 画像ごとにOCR処理を実行してtemp_rowsに格納
@@ -1067,7 +1100,7 @@ async def context_ocr(interaction: discord.Interaction, message: discord.Message
     
     # CSVを出力
     await interaction.followup.send(
-        content="OCR結果のCSVだよ(\*`･ω･)ゞ",
+        content="OCR結果のCSVだよ🫡",
         file=discord.File(filename)
     )
     
