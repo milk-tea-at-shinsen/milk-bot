@@ -468,15 +468,15 @@ async def collect_message(channel, counts, minutes, start_msg, limit_msg):
     # 終了フラグが立つまでループ
     while end_flag is False:
         # historyの最初の位置より古い100件分のメッセージを取得
-        m = await channel.history(before=loop_start_msg, limit=100).flatten()
+        msgs = [m async for m in channel.history(before=loop_start_msg, limit=100)]
 
         # 取得数が100件未満または累計が指定数以上または100件目が最終なら終了
-        if len(m) < 100 or (len(messages) + len(m)) >= counts or m[0].id == limit_msg.id:
+        if len(m) < 100 or (len(messages) + len(msgs)) >= counts or msgs[0].id == limit_msg.id:
             end_flag = True
         else:
-            loop_start_msg = m[0].id
+            loop_start_msg = msgs[0].id
         # リストに追加
-        messages.extend(m if not end_flag else m[:counts - len(messages)])
+        messages.extend(msgs if not end_flag else msgs[:counts - len(messages)])
 
     # リストを古い順にソート
     messages.sort(key=lambda msg: msg.created_at)
