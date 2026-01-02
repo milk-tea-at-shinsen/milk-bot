@@ -1063,10 +1063,7 @@ async def export_members(interaction: discord.Interaction):
 @app_commands.describe(minutes = "時間指定(分)", counts = "件数指定(件)")
 async def table_ocr(interaction: discord.Interaction, minutes: str = None, counts: str = None):
     await interaction.response.defer()
-    print(interaction.data)
-    # int_id = int(interaction.message.id)
-    int_msg = await interaction.channel.fetch_message(interaction.message)
-    print(int_msg)
+    int_msg = await interaction.channel.fetch_message(interaction.message.data["id"])
 
     # 返信コマンド実行時
     if int_msg.reference.resolved:
