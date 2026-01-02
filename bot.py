@@ -458,7 +458,7 @@ async def collect_message(channel, counts, minutes, start_msg, limit_msg):
     # 終了フラグをFalseに設定
     end_flag = False
     # 返信先メッセージをリストに格納
-    messages = [start_msg]
+    messages = []
     # 返信先メッセージをhistoryの最初の位置に設定
     loop_start_msg = start_msg
     # 件数指定なしまたは1未満の場合は1を設定
