@@ -455,6 +455,7 @@ async def export_vote_csv(interaction, result, msg_id, dt, mode):
 #---------------
 #=====メッセージリストの作成=====
 async def collect_message(channel, counts, minutes, start_msg, limit_msg):
+    print("[start: collect_message]")
     # 終了フラグをFalseに設定
     end_flag = False
     # 返信先メッセージをリストに格納
