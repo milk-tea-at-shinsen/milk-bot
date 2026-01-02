@@ -1046,9 +1046,8 @@ async def export_members(interaction: discord.Interaction):
 async def table_ocr(interaction: discord.Interaction, minutes: str = None, counts: str = None):
     await interaction.response.defer()
 
-    print(interaction.message)
     # チャンネルの最新メッセージを取得
-    start_msg = await interaction.message.id
+    start_msg = await interaction.channel.last_message_id
     # チャンネルの一番古いメッセージを取得
     limit_msg = await interaction.channel.history(after=None, limit=1).flatten()
     limit_msg = limit_msg[0]
