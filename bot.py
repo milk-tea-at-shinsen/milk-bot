@@ -510,7 +510,6 @@ async def get_image(channel, msg_id):
             async with session.get(attachment.url) as resp:
                 content = await resp.read()
                 contents.append(content)
-    print(f"contents: {contents}")
 
     return contents
 
@@ -1068,7 +1067,6 @@ async def table_ocr(interaction: discord.Interaction, counts: str = None, minute
         contents = await get_image(interaction.channel, msg_id)
         if contents:
             all_contents.extend(contents)
-            print(f"all_contents: {all_contents}")
 
     # visionからテキストを受け取ってCSV用に整形
     temp_rows = []
