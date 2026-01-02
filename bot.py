@@ -491,7 +491,7 @@ async def collect_message(channel, counts, minutes, start_msg, limit_msg):
         start_time = start_msg.created_at
         end_time = start_time + timedelta(minutes=int(minutes))
         # メッセージのタイムスタンプが範囲内ならリストに追加
-        msg_ids = [message.id for message in messages if start_time <= msg.created_at <= end_time]
+        msg_ids = [message.id for message in messages if start_time <= message.created_at <= end_time]
         print(f"msg_ids: {msg_ids}")
     else:
         msg_ids = [message.id for message in messages]
@@ -1056,7 +1056,7 @@ async def table_ocr(interaction: discord.Interaction, minutes: str = None, count
 
     # チャンネルの最新メッセージを取得
     start_msg_id = interaction.channel.last_message_id
-    print(f"start_msg_ids: {start_msg_ids}")
+    print(f"start_msg_id: {start_msg_id}")
     start_msg = interaction.channel.fetch_message(start_msg_id)
     # チャンネルの一番古いメッセージを取得
     msgs = [msg async for msg in interaction.channel.history(after=None, limit=1)]
