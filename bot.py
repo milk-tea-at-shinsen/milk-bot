@@ -479,6 +479,7 @@ async def collect_message(channel, counts, minutes, start_msg, limit_msg):
             loop_start_msg = msgs[0].id
         # リストに追加
         messages.extend(msgs if not end_flag else msgs[:counts - len(messages)])
+        print(f"messages: {messages}")
 
     # リストを古い順にソート
     messages.sort(key=lambda m: m.created_at)
