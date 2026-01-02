@@ -1066,9 +1066,9 @@ async def table_ocr(interaction: discord.Interaction, minutes: str = None, count
 
 
     # 返信コマンド実行時
-    if interaction.data.resolved.messages:
+    if interaction.data["resolved"]["messages"]:
         # 返信先のメッセージの情報を取得
-        start_msg_id = next(iter(interaction.data.resolved.messages), None)
+        start_msg_id = next(iter(interaction.data["resolved"]["messages"], None)
         start_msg = await interaction.channel.fetch_message(start_msg_id)
         # チャンネルの最新メッセージを取得
         limit_msg = await interaction.channel.fetch_message(interaction.channel.last_message_id)
