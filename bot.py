@@ -1059,6 +1059,7 @@ async def table_ocr(interaction: discord.Interaction, counts: str = None, minute
     msgs = [msg async for msg in interaction.channel.history(limit=1, oldest_first=True)]
     limit_msg = msgs[0]
 
+    # 指定した範囲のメッセージを取得
     msg_ids = await collect_message(interaction.channel, counts, minutes, start_msg, limit_msg)
 
     # メッセージから画像データを取得してリストに格納
