@@ -74,7 +74,6 @@ else:
     proxy_votes = {}
 print(f"dict proxy_votes: {proxy_votes}")
 
-
 #===============
 # 共通処理関数
 #===============
