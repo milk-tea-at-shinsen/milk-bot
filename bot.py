@@ -487,7 +487,8 @@ async def collect_message(channel, counts, minutes, start_msg, limit_msg):
         end_time = start_time + timedelta(minutes=int(minutes))
         # メッセージのタイムスタンプが範囲内ならリストに追加
         msg_ids = [msg.id for msg in messages if start_time <= msg.created_at <= end_time]
-
+    else:
+        msg_ids = messages
     return msg_ids
             
 #=====添付画像バイナリ取得処理=====
