@@ -466,7 +466,7 @@ async def collect_message(channel, counts, minutes, start_msg, limit_msg):
     print(f"loop_start_msg: {loop_start_msg}")
     print(f"counts: {counts}")
     # 件数指定なしまたは1未満の場合は1を設定
-    if counts is None or counts < 1:
+    if counts is None or int(counts) < 1:
         counts = 1
 
     # 終了フラグが立つまでループ
@@ -1053,7 +1053,7 @@ async def export_members(interaction: discord.Interaction):
 #=====/table_ocr コマンド=====
 @bot.tree.command(name="table_ocr", description="表の画像からCSVを作成するよ")
 @app_commands.describe(minutes = "時間指定(分)", counts = "件数指定(件)")
-async def table_ocr(interaction: discord.Interaction, minutes: int = None, counts: int = None):
+async def table_ocr(interaction: discord.Interaction, minutes: str = None, counts: str = None):
     await interaction.response.defer()
 
     # チャンネルの最新メッセージを取得
