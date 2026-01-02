@@ -1075,12 +1075,12 @@ async def table_ocr(interaction: discord.Interaction, minutes: str = None, count
         contents = get_image(interaction.channel, msg_id)
         print(f"contents: {contents}")
         if contents:
-            all_contents.extend(content)
+            all_contents.extend(contents)
             print(f"all_contents: {all_contents}")
 
     # visionからテキストを受け取ってCSV用に整形
     temp_rows = []
-    for content in contents:
+    for content in all_contents:
         temp_rows.extend(extract_table_from_image(content))
 
     # 重複行を削除
