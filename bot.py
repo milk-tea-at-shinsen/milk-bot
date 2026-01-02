@@ -462,7 +462,7 @@ async def collect_message(channel, counts, minutes, start_msg, limit_msg):
     messages = [start_msg]
     print(f"messages: {messages}")
     # 返信先メッセージをhistoryの最初の位置に設定
-    loop_start_msg = start_msg.id
+    loop_start_msg = start_msg
     print(f"loop_start_msg: {loop_start_msg}")
     print(f"counts: {counts}")
     # 件数指定なしまたは1未満の場合は1を設定
