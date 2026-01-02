@@ -332,10 +332,10 @@ async def make_vote_result(interaction, msg_id):
                             agent_display_name = agent.display_name
                         else:
                             agent_display_name = "None"
-                        
+            
                         users.append(f"{voter}(by{agent_display_name})")
                         display_names.append(f"{voter}(by{agent_display_name})")
-            
+
         result[i] = {
             "emoji": reaction.emoji,
             "option": options[i],
