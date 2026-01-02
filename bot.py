@@ -1063,12 +1063,13 @@ async def export_members(interaction: discord.Interaction):
 @app_commands.describe(minutes = "時間指定(分)", counts = "件数指定(件)")
 async def table_ocr(interaction: discord.Interaction, minutes: str = None, counts: str = None):
     await interaction.response.defer()
-
+    int_id = int(interaction.data["values"][0]
+    int_msg = await interaction.channel.fetch_message(int_id)
 
     # 返信コマンド実行時
-    if interaction.data["resolved"]["messages"]:
+    if int_msg.reference.resolved:
         # 返信先のメッセージの情報を取得
-        start_msg_id = next(iter(interaction.data["resolved"]["messages"], None))
+        start_msg_id = next(iter(int_msg.reference.resolved, None))
         start_msg = await interaction.channel.fetch_message(start_msg_id)
         # チャンネルの最新メッセージを取得
         limit_msg = await interaction.channel.fetch_message(interaction.channel.last_message_id)
