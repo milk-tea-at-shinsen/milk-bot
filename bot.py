@@ -498,6 +498,7 @@ async def get_image(channel, msg_id):
     print("[start: get_image]")
     message = await channel.fetch_message(msg_id)
     
+    # 添付画像がなければNoneを返す
     if not message.attachments:
         return None
 
