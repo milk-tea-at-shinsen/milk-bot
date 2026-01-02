@@ -504,6 +504,7 @@ async def collect_message(channel, counts, minutes, start_msg, limit_msg):
             
 #=====添付画像バイナリ取得処理=====
 async def get_image(channel, msg_id):
+    print("[start: get_image]")
     message = await channel.fetch_message(msg_id)
     
     if not message.attachments:
@@ -516,6 +517,7 @@ async def get_image(channel, msg_id):
             async with session.get(attachment.url) as resp:
                 content = await resp.read()
                 contents.append(content)
+    print(f"contents: {contents}")
 
     return contents
 
