@@ -1071,7 +1071,7 @@ async def table_ocr(interaction: discord.Interaction, counts: str = None, minute
     print(f"limit_msg: {limit_msg}")
 
     msg_ids = await collect_message(interaction.channel, counts, minutes, start_msg, limit_msg)
-    print(f"msg_ids: {msg_ids}")
+    print(f"return: msg_ids: {msg_ids}")
 
     # メッセージから画像データを取得してリストに格納
     all_contents = []
