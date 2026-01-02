@@ -466,7 +466,9 @@ async def collect_message(channel, counts, minutes, start_msg, limit_msg):
     print(f"loop_start_msg: {loop_start_msg}")
     print(f"counts: {counts}")
     # 件数指定なしまたは1未満の場合は1を設定
-    if counts is None or int(counts) < 1:
+    if counts is not None:
+        counts = int(counts)
+    if counts is None or counts < 1:
         counts = 1
 
     # 終了フラグが立つまでループ
