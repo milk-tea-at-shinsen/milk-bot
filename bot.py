@@ -468,7 +468,7 @@ async def collect_message(channel, counts, minutes, start_msg, limit_msg):
     # 終了フラグが立つまでループ
     while end_flag is False:
         # historyの最初の位置より古い100件分のメッセージを取得
-        msgs = [m async for m in channel.history(before=loop_start_msg, limit=100)]
+        msgs = [msg async for msg in channel.history(before=loop_start_msg, limit=100)]
 
         # 取得数が100件未満または累計が指定数以上または100件目が最終なら終了
         if len(msgs) < 100 or (len(messages) + len(msgs)) >= counts or msgs[0].id == limit_msg.id:
@@ -479,16 +479,16 @@ async def collect_message(channel, counts, minutes, start_msg, limit_msg):
         messages.extend(msgs if not end_flag else msgs[:counts - len(messages)])
 
     # リストを古い順にソート
-    messages.sort(key=lambda msg: msg.created_at)
+    messages.sort(key=lambda m: m.created_at)
 
     if minutes:
         # 時間指定がある場合、取得するメッセージの範囲を計算
         start_time = start_msg.created_at
         end_time = start_time + timedelta(minutes=int(minutes))
         # メッセージのタイムスタンプが範囲内ならリストに追加
-        msg_ids = [msg.id for msg in messages if start_time <= msg.created_at <= end_time]
+        msg_ids = [message.id for message in messages if start_time <= msg.created_at <= end_time]
     else:
-        msg_ids = messages
+        msg_ids = [message.id for message in messages]
     return msg_ids
             
 #=====添付画像バイナリ取得処理=====
@@ -1048,9 +1048,10 @@ async def table_ocr(interaction: discord.Interaction, minutes: str = None, count
     await interaction.response.defer()
 
     # チャンネルの最新メッセージを取得
-    start_msg = interaction.channel.last_message_id
+    start_msg_id = interaction.channel.last_message_id
+    start_msg = interaction.channel.fetch_message(start_msg_id)
     # チャンネルの一番古いメッセージを取得
-    msgs = [m async for m in interaction.channel.history(after=None, limit=1)]
+    msgs = [msg async for msg in interaction.channel.history(after=None, limit=1)]
     limit_msg = msgs[0]
 
     msg_ids = collect_message(interaction.channel, counts, minutes, start_msg, limit_msg)
