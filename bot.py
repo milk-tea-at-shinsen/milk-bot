@@ -1064,10 +1064,11 @@ async def export_members(interaction: discord.Interaction):
 async def table_ocr(interaction: discord.Interaction, minutes: str = None, counts: str = None):
     await interaction.response.defer()
 
+
     # 返信コマンド実行時
     if interaction.data.resolved.messages:
         # 返信先のメッセージの情報を取得
-        start_msg_id = next(iter(interaction.data.resolved.messages.values()), None)
+        start_msg_id = next(iter(interaction.data.resolved.messages), None)
         start_msg = await interaction.channel.fetch_message(start_msg_id)
         # チャンネルの最新メッセージを取得
         limit_msg = await interaction.channel.fetch_message(interaction.channel.last_message_id)
