@@ -1076,7 +1076,7 @@ async def table_ocr(interaction: discord.Interaction, counts: str = None, minute
     # メッセージから画像データを取得してリストに格納
     all_contents = []
     for msg_id in msg_ids:
-        contents = get_image(interaction.channel, msg_id)
+        contents = await get_image(interaction.channel, msg_id)
         print(f"contents: {contents}")
         if contents:
             all_contents.extend(contents)
