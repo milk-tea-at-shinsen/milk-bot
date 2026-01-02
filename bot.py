@@ -471,7 +471,7 @@ async def collect_message(channel, counts, minutes, start_msg, limit_msg):
         msgs = [m async for m in channel.history(before=loop_start_msg, limit=100)]
 
         # 取得数が100件未満または累計が指定数以上または100件目が最終なら終了
-        if len(m) < 100 or (len(messages) + len(msgs)) >= counts or msgs[0].id == limit_msg.id:
+        if len(msgs) < 100 or (len(messages) + len(msgs)) >= counts or msgs[0].id == limit_msg.id:
             end_flag = True
         else:
             loop_start_msg = msgs[0].id
