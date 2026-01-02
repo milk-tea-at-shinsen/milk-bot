@@ -1058,7 +1058,7 @@ async def table_ocr(interaction: discord.Interaction, minutes: str = None, count
     # チャンネルの最新メッセージを取得
     start_msg_id = interaction.channel.last_message_id
     print(f"start_msg_id: {start_msg_id}")
-    start_msg = interaction.channel.fetch_message(start_msg_id)
+    start_msg = await interaction.channel.fetch_message(start_msg_id)
     # チャンネルの一番古いメッセージを取得
     msgs = [msg async for msg in interaction.channel.history(after=None, limit=1)]
     print(f"msgs: {msgs}")
