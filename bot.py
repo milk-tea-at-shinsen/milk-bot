@@ -1053,7 +1053,7 @@ async def export_members(interaction: discord.Interaction):
 #=====/table_ocr コマンド=====
 @bot.tree.command(name="table_ocr", description="表の画像からCSVを作成するよ")
 @app_commands.describe(minutes = "時間指定(分)", counts = "件数指定(件)")
-async def table_ocr(interaction: discord.Interaction, minutes: str = None, counts: str = None):
+async def table_ocr(interaction: discord.Interaction, minutes: int = None, counts: int = None):
     await interaction.response.defer()
 
     # チャンネルの最新メッセージを取得
