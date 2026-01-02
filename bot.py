@@ -459,8 +459,10 @@ async def collect_message(channel, counts, minutes, start_msg, limit_msg):
     end_flag = False
     # 返信先メッセージをリストに格納
     messages = [start_msg]
+    print(f"messages: {messages}")
     # 返信先メッセージをhistoryの最初の位置に設定
     loop_start_msg = start_msg.id
+    print(f"loop_start_msg: {loop_start_msg}")
     # 件数指定なしまたは1未満の場合は1を設定
     if counts is None or counts < 1:
         counts = 1
@@ -469,6 +471,7 @@ async def collect_message(channel, counts, minutes, start_msg, limit_msg):
     while end_flag is False:
         # historyの最初の位置より古い100件分のメッセージを取得
         msgs = [msg async for msg in channel.history(before=loop_start_msg, limit=100)]
+        print(f"msgs: {msgs}")
 
         # 取得数が100件未満または累計が指定数以上または100件目が最終なら終了
         if len(msgs) < 100 or (len(messages) + len(msgs)) >= counts or msgs[0].id == limit_msg.id:
@@ -477,9 +480,11 @@ async def collect_message(channel, counts, minutes, start_msg, limit_msg):
             loop_start_msg = msgs[0].id
         # リストに追加
         messages.extend(msgs if not end_flag else msgs[:counts - len(messages)])
+        print(f"messages: {messages}")
 
     # リストを古い順にソート
     messages.sort(key=lambda m: m.created_at)
+    print(f"messages: {messages}")
 
     if minutes:
         # 時間指定がある場合、取得するメッセージの範囲を計算
@@ -487,8 +492,10 @@ async def collect_message(channel, counts, minutes, start_msg, limit_msg):
         end_time = start_time + timedelta(minutes=int(minutes))
         # メッセージのタイムスタンプが範囲内ならリストに追加
         msg_ids = [message.id for message in messages if start_time <= msg.created_at <= end_time]
+        print(f"msg_ids: {msg_ids}")
     else:
         msg_ids = [message.id for message in messages]
+        print(f"msg_ids: {msg_ids}")
     return msg_ids
             
 #=====添付画像バイナリ取得処理=====
@@ -1049,19 +1056,25 @@ async def table_ocr(interaction: discord.Interaction, minutes: str = None, count
 
     # チャンネルの最新メッセージを取得
     start_msg_id = interaction.channel.last_message_id
+    print(f"start_msg_ids: {start_msg_ids}")
     start_msg = interaction.channel.fetch_message(start_msg_id)
     # チャンネルの一番古いメッセージを取得
     msgs = [msg async for msg in interaction.channel.history(after=None, limit=1)]
+    print(f"msgs: {msgs}")
     limit_msg = msgs[0]
+    print(f"limit_msg: {limit_msg}")
 
     msg_ids = collect_message(interaction.channel, counts, minutes, start_msg, limit_msg)
-    
+    print(f"msg_ids: {msg_ids}")
+
     # メッセージから画像データを取得してリストに格納
     all_contents = []
     for msg_id in msg_ids:
         contents = get_image(interaction.channel, msg_id)
+        print(f"contents: {contents}")
         if contents:
             all_contents.extend(content)
+            print(f"all_contents: {all_contents}")
 
     # visionからテキストを受け取ってCSV用に整形
     temp_rows = []
