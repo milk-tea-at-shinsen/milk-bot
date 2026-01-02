@@ -217,6 +217,21 @@ def cancel_proxy_vote(msg_id, voter, agent_id):
                 print(f"キャンセル対象の代理投票がありません")
                 return None
 
+#=====CSV作成処理=====
+def make_csv(filename, rows, meta=None, header=None):
+    print("[start: make_csv]")
+    with open(filename, "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.writer(f)
+        # metaの書込
+        if meta:
+            for key, value in meta.items():
+                writer.writerow([f"#{key}: {value}"])
+        # headerの書込
+        if header:
+            writer.writerow(header)
+        # rowsの書込
+        writer.writerows(rows)
+
 #===============
 # 個別処理関数
 #===============
@@ -410,21 +425,6 @@ def make_listed_rows(result):
     
     return header, rows
 
-#=====CSV作成処理=====
-def make_csv(filename, rows, meta=None, header=None):
-    print("[start: make_csv]")
-    with open(filename, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.writer(f)
-        # metaの書込
-        if meta:
-            for key, value in meta.items():
-                writer.writerow([f"#{key}: {value}"])
-        # headerの書込
-        if header:
-            writer.writerow(header)
-        # rowsの書込
-        writer.writerows(rows)
-
 #=====投票結果CSV出力処理=====
 async def export_vote_csv(interaction, result, msg_id, dt, mode):
     print("[start: export_vote_csv]")
@@ -453,7 +453,7 @@ async def export_vote_csv(interaction, result, msg_id, dt, mode):
 #---------------
 # OCR関係
 #---------------
-#=====画像取得メッセージリストの作成=====
+#=====メッセージリストの作成=====
 async def collect_message(channel, counts, minutes, start_msg, limit_msg, direction):
         # 終了フラグをFalseに設定
         end_flag = False
@@ -494,8 +494,6 @@ async def collect_message(channel, counts, minutes, start_msg, limit_msg, direct
 
         # リストを古い順にソート
         messages.sort(key=lambda msg: msg.created_at)
-        # 件数でフィルタ
-        messages = messages[:counts]
 
         if minutes:
             # 時間指定がある場合、取得するメッセージの範囲を計算
@@ -509,6 +507,23 @@ async def collect_message(channel, counts, minutes, start_msg, limit_msg, direct
             msg_ids = [msg.id for msg in messages if start_time <= msg.created_at <= end_time]
 
             return msg_ids
+            
+#=====添付画像バイナリ取得処理=====
+async def get_image(channel, msg_id):
+    message = await channel.fetch_message(msg_id)
+    
+    if not message.attachments:
+        return None
+
+    # 画像データをcontentsに格納
+    contents = []
+    async with aiohttp.ClientSession() as session:
+        for attachment in message.attachments:
+            async with session.get(attachment.url) as resp:
+                content = await resp.read()
+                contents.append(content)
+
+    return contents
 
 #=====文字座標計算=====
 #---行センター出し関数---
@@ -1068,6 +1083,32 @@ async def table_ocr(interaction: discord.Interaction, minutes: str = None, count
         limit_msg = limit_msg[0]
 
         msg_ids = collect_message(interaction.channel, counts, minutes, start_msg, limit_msg, "backward")
+    
+    # メッセージから画像データを取得してリストに格納
+    all_contents = []
+    for msg_id in msg_ids:
+        contents = get_image(interaction.channel, msg_id)
+        if contents:
+            all_contents.extend(content)
+
+    # visionからテキストを受け取ってCSV用に整形
+    temp_rows = []
+    for content in contents:
+        temp_rows.extend(extract_table_from_image(content))
+
+    # 重複行を削除
+    rows = remove_duplicate_rows(temp_rows)
+    print(f"rows:{rows}")
+    
+    # csv作成処理
+    filename = f"/tmp/ocr_{datetime.now(JST).strftime('%Y%m%d_%H%M')}.csv"
+    make_csv(filename, rows)
+    
+    # CSVを出力
+    await interaction.followup.send(
+        content="OCR結果のCSVだよ🫡",
+        file=discord.File(filename)
+    )
 
 #=====context_ocr コマンド=====
 @bot.tree.context_menu(name="context_ocr")
@@ -1080,9 +1121,7 @@ async def context_ocr(interaction: discord.Interaction, message: discord.Message
 
     # 画像ごとにOCR処理を実行してtemp_rowsに格納
     temp_rows = []
-    for i, attachment in enumerate(message.attachments):
-        attachment = message.attachments[i]
-
+    for attachment in message.attachments:
         async with aiohttp.ClientSession() as session:
             async with session.get(attachment.url) as resp:
                 content = await resp.read()
