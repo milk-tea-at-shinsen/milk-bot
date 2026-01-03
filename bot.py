@@ -314,6 +314,7 @@ async def make_vote_result(interaction, msg_id):
     print("[start: make_vote_result]")
     # 投票辞書を読み込み
     options = votes[msg_id]["options"]
+    print(f"votes: {votes}")
     # メッセージを読み込み
     message = await interaction.channel.fetch_message(msg_id)
     # サーバー情報を読み込み
