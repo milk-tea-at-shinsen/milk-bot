@@ -895,6 +895,9 @@ class AddOptionInput(discord.ui.Modal):
         message = await interaction.channel.fetch_message(self.msg_id)
         print(f"message: {message}")
         await message.edit(embed = embed)
+        # リアクションを追加
+        for i in range(len(add_options)):
+            await message.add_reaction(add_reactions[i])
         await interaction.response.send_message("投票に選択肢を追加したよ🫡")
 
         # 辞書の更新
@@ -1044,9 +1047,8 @@ async def vote(interaction: discord.Interaction,
     
     # リアクションを追加
     message = await interaction.original_response()
-    for i, opt in enumerate(options):
-        if opt:
-            await message.add_reaction(reactions[i])
+    for i in range(len(options)):
+        await message.add_reaction(reactions[i])
     
     # 辞書に保存
     add_vote(message.id, question, reactions, options)
