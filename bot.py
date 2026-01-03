@@ -890,17 +890,17 @@ class AddOptionInput(discord.ui.Modal):
         reactions.extend(add_reactions)
 
         # embedを書き換え
-        question = votes[msg_id]["question"]
+        question = votes[self.msg_id]["question"]
         description = ""
         embed = make_embed_text(options, reactions, question, description)
 
         # embedを表示
-        message = await discord.channel.fetch_message(msg_id)
+        message = await discord.channel.fetch_message(self.msg_id)
         print(f"message: {message}")
         message.edit(embed = embed)
 
         # 辞書の更新
-        add_vote(msg_id, question, reactions, options)
+        add_vote(self.msg_id, question, reactions, options)
         print(f"votes: {votes}")
 
 #=====投票選択モード切替=====
