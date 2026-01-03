@@ -717,10 +717,8 @@ class ReminderSelect(View):
 #=====投票選択=====
 class VoteSelect(View):
     # クラスの初期設定
-    def __init__(self, votes, mode, voter=None, agent_id=None):
+    def __init__(self, mode, voter=None, agent_id=None):
         super().__init__()
-        # votesプロパティに投票辞書をセット
-        self.votes = votes
         # modeプロパティに投票モードをセット
         self.mode = mode
         # voterプロパティに投票者名をセット
@@ -806,8 +804,6 @@ class VoteOptionSelect(View):
     # クラスの初期設定
     def __init__(self, msg_id, voter, agent_id):
         super().__init__()
-        # votesプロパティに投票辞書をセット
-        self.votes = votes
         # msg_idプロパティにメッセージIDをセット
         self.msg_id = msg_id
         # voterプロパティに投票者名をセット
@@ -1058,7 +1054,7 @@ async def vote(interaction: discord.Interaction,
 @bot.tree.command(name="vote_add_option", description="投票に選択肢を追加するよ")
 async def vote_add_option(interaction: discord.Interaction):
     if votes:
-        view = VoteSelect(votes=votes, mode=VoteSelectMode.ADD_OPTION, voter=None, agent_id=None)
+        view = VoteSelect(mode=VoteSelectMode.ADD_OPTION, voter=None, agent_id=None)
         await interaction.response.send_message("選択肢を追加する投票を選んでね", view=view)
     # 投票がない場合のメッセージ
     else:
@@ -1074,10 +1070,10 @@ async def vote_add_option(interaction: discord.Interaction):
 async def vote_result(interaction: discord.Interaction, mode: str):
     if votes:
         if mode == "mid":
-            view = VoteSelect(votes=votes, mode=VoteSelectMode.MID_RESULT, voter=None, agent_id=None)
+            view = VoteSelect(mode=VoteSelectMode.MID_RESULT, voter=None, agent_id=None)
             await interaction.response.send_message("どの投票結果を表示するか選んでね", view=view)
         elif mode == "final":
-            view = VoteSelect(votes=votes, mode=VoteSelectMode.FINAL_RESULT, voter=None, agent_id=None)
+            view = VoteSelect(mode=VoteSelectMode.FINAL_RESULT, voter=None, agent_id=None)
             await interaction.response.send_message("どの投票結果を表示するか選んでね", view=view)
         else:
             await interaction.response.send_message("選択モードの指定がおかしいみたい🥺")
@@ -1092,7 +1088,7 @@ async def vote_result(interaction: discord.Interaction, mode: str):
 async def proxy_vote(interaction: discord.Interaction, voter: str):
     if votes:
         agent_id = interaction.user.id
-        view = VoteSelect(votes=votes, mode=VoteSelectMode.PROXY_VOTE, voter=voter, agent_id=agent_id)
+        view = VoteSelect(mode=VoteSelectMode.PROXY_VOTE, voter=voter, agent_id=agent_id)
         await interaction.response.send_message("どの投票に代理投票するか選んでね", view=view)
     else:
         await interaction.response.send_message("代理投票できる投票がないみたい🥺")
@@ -1103,7 +1099,7 @@ async def proxy_vote(interaction: discord.Interaction, voter: str):
 async def cancel_proxy(interaction: discord.Interaction, voter: str):
     if votes:
         agent_id = interaction.user.id
-        view = VoteSelect(votes=votes, mode=VoteSelectMode.CANCEL_PROXY_VOTE, voter=voter, agent_id=agent_id)
+        view = VoteSelect(mode=VoteSelectMode.CANCEL_PROXY_VOTE, voter=voter, agent_id=agent_id)
         await interaction.response.send_message("代理投票を取り消しする投票を選んでね", view=view)
     else:
         await interaction.response.send_message("取り消しできる投票がないみたい🥺")
