@@ -1049,7 +1049,7 @@ async def vote(interaction: discord.Interaction,
 #=====/vote_add コマンド=====
 @bot.tree.command(name="vote_add_option", description="投票に選択肢を追加するよ")
 async def vote_add_option(interaction: discord.Interaction):
-    if vote:
+    if votes:
         view = VoteSelect(votes=votes, mode=VoteSelectMode.ADD_OPTION, voter=None, agent_id=None)
         await interaction.response.send_message("選択肢を追加する投票を選んでね", view=view)
     # 投票がない場合のメッセージ
