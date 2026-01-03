@@ -895,7 +895,7 @@ class AddOptionInput(discord.ui.Modal):
         embed = make_embed_text(options, reactions, question, description)
 
         # embedを表示
-        message = await channel.fetch_message(self.msg_id)
+        message = await interaction.channel.fetch_message(self.msg_id)
         print(f"message: {message}")
         message.edit(embed = embed)
         interaction.response.send_message("投票に選択肢を追加したよ🫡")
