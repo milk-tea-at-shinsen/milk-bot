@@ -289,6 +289,26 @@ async def reminder_loop():
 #---------------
 # 投票関係
 #---------------
+#=====リアクションと絵文字を差し替え=====
+def reaction_replace(options, reactions):
+    for i, opt in enumerate(options):
+        if opt:
+            first_char = opt[0]
+            if first_char in emoji.EMOJI_DATA:
+                # 選択肢の最初の文字が絵文字の場合、その絵文字をリアクションに差替
+                reactions[i] = first_char
+                # 選択肢から最初の文字を削除
+                options[i] = opt[1:]
+    return reactions
+
+#=====投票選択肢embed作成=====
+def make_embed_text(options, reactions, question, description):
+    for i, opt in enumerate(options):
+        if opt:
+            description += f"{reactions[i]} {opt}\n"
+    embed = discord.Embed(title=question, description=description, color=discord.Color.green())
+    return embed
+
 #=====投票集計=====
 async def make_vote_result(interaction, msg_id):
     print("[start: make_vote_result]")
@@ -826,9 +846,9 @@ class VoteOptionSelect(View):
         await interaction.followup.send(f"**{agent_display_name}** から **{self.voter}** の分の投票を受け付けたよ🫡")
 
 #=====追加選択肢入力=====
-class AddOptionInput(view):
+class AddOptionInput(discord.ui.Modal):
     # クラスの初期設定
-    def __init__(self, msg_id):
+    def __init__(self, msg_id, votes):
         super().__init__(title="追加する選択肢を入力してね")
         # msg_idプロパティにメッセージIDをセット
         self.msg_id = msg_id
@@ -836,12 +856,9 @@ class AddOptionInput(view):
         # ModalUIの定義
         self.inputs = []
         for i in range(5):
-            text = TextInput(
+            text = discord.ui.TextInput(
                 label=f"選択肢{i+1}",
-                if i == 0:
-                    required=True
-                else:
-                    required=False
+                required=(i == 0)
             )
             self.inputs.append(text)
             self.add_item(text)
@@ -849,28 +866,30 @@ class AddOptionInput(view):
     # 選択肢入力後の処理
     async def on_submit(self, interaction: discord.Interaction):
         # 追加選択肢をリスト化
-        add_options = [add_opt.values for add_opt in self.inputs if add_opt.value.strip()]
+        add_options = [add_opt.value for add_opt in self.inputs if add_opt.value.strip()]
         # 辞書の内容を取得
-        options = votes[msg_id]["options"]
-        reactions = votes[msg_id]["reactions"]
+        options = votes[self.msg_id]["options"]
+        reactions = votes[self.msg_id]["reactions"]
         
         # リアクションリストを更新
-        add_reacts = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"][len(options)+1:len(add_options)]
-        for i, add_opt in enumerate(add_options):
-        if add_opt:
-            first_char = add_opt[0]
-            if first_char in emoji.EMOJI_DATA:
-                # 選択肢の最初の文字が絵文字の場合、その絵文字をリアクションに差替
-                add_react[i] = first_char
-                # 選択肢から最初の文字を削除
-                add_options[i] = add_opt[1:]
+        add_reactions = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"][len(options) : len(options) + len(add_options)]
+        add_reactions = reaction_replace(add_options, add_reactions)
 
         # 選択肢リストを更新
         options.extend(add_options)
-        reaction.extend(add_reaction)
-        
+        reactions.extend(add_reactions)
+
         # embedを書き換え
-        
+        question = votes[msg_id]["question"]
+        description = ""
+        embed = make_embed_text(options, reactions, question, description)
+
+        # embedを表示
+        message = await discord.channel.fetch_message(msg_id)
+        message.edit(embed = embed)
+
+        # 辞書の更新
+        add_vote(msg_id, question, reactions, options)
 
 #=====投票選択モード切替=====
 class VoteSelectMode(Enum):
@@ -1004,23 +1023,13 @@ async def vote(interaction: discord.Interaction,
     # リアクションリスト
     reacts = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
     reactions = reacts[:len(options)]
+    # 選択肢の1文字目が絵文字ならリアクションリストを置き換え
+    reactions = reaction_replace(options, reactions)
     # 選択肢表示を初期化
     description = ""
 
-    for i, opt in enumerate(options):
-        if opt:
-            first_char = opt[0]
-            if first_char in emoji.EMOJI_DATA:
-                # 選択肢の最初の文字が絵文字の場合、その絵文字をリアクションに差替
-                reactions[i] = first_char
-                # 選択肢から最初の文字を削除
-                options[i] = opt[1:]
-
     # Embedで出力
-    for i, opt in enumerate(options):
-        if opt:
-            description += f"{reactions[i]} {opt}\n"
-    embed = discord.Embed(title=question, description=description, color=discord.Color.green())
+    embed = make_embed_text(options, reactions, question, description)
     await interaction.response.send_message(embed=embed)
     
     # リアクションを追加
@@ -1031,6 +1040,16 @@ async def vote(interaction: discord.Interaction,
     
     # 辞書に保存
     add_vote(message.id, question, reactions, options)
+
+#=====/vote_add コマンド=====
+@bot.tree.command(name="vote_add_option", description="投票に選択肢を追加するよ")
+async def vote_add_option(interaction: discord.Interaction):
+    if vote:
+        view = VoteSelect(votes=votes, mode=VoteSelectMode.ADD_OPTION, voter=None, agent_id=None)
+        await interaction.response.send_message("どの投票に選択肢を追加するか選んでね", view=view)
+    # 投票がない場合のメッセージ
+    else:
+        await interaction.response.send_message("集計できる投票がないみたい🥺")
 
 #=====/vote_result コマンド=====
 @bot.tree.command(name="vote_result", description="投票結果を表示するよ")
