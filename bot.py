@@ -741,8 +741,8 @@ class VoteSelect(View):
         msg_id = int(interaction.data["values"][0])
 
         # 代理投票と集計で処理を分岐
+        # 代理投票
         if self.mode == VoteSelectMode.PROXY_VOTE:
-            # 代理投票処理
             view = VoteOptionSelect(msg_id, self.voter, self.agent_id)
             await interaction.followup.send("代理投票する選択肢を選んでね", view=view)
         # 代理投票キャンセル
@@ -752,8 +752,11 @@ class VoteSelect(View):
                 await interaction.followup.send(f"**{self.voter}** の分の代理投票を取り消したよ🫡")
             else:
                 await interaction.followup.send(f"取り消せる代理投票がないみたい🥺")
+        elif self.mode == VoteSelectMode.ADD_OPTION:
+            view = AddOptionInput(msg_id)
+            await interaction.followup.send("追加する選択肢を入力してね", view=view)
         else:
-            # 集計処理
+            # 集計
             dt, result = await make_vote_result(interaction, msg_id)
 
             # 結果表示処理
@@ -822,12 +825,60 @@ class VoteOptionSelect(View):
         agent_display_name = agent.display_name
         await interaction.followup.send(f"**{agent_display_name}** から **{self.voter}** の分の投票を受け付けたよ🫡")
 
-#=====集計モード切替=====
+#=====追加選択肢入力=====
+class AddOptionInput(view):
+    # クラスの初期設定
+    def __init__(self, msg_id):
+        super().__init__(title="追加する選択肢を入力してね")
+        # msg_idプロパティにメッセージIDをセット
+        self.msg_id = msg_id
+ 
+        # ModalUIの定義
+        self.inputs = []
+        for i in range(5):
+            text = TextInput(
+                label=f"選択肢{i+1}",
+                if i == 0:
+                    required=True
+                else:
+                    required=False
+            )
+            self.inputs.append(text)
+            self.add_item(text)
+
+    # 選択肢入力後の処理
+    async def on_submit(self, interaction: discord.Interaction):
+        # 追加選択肢をリスト化
+        add_options = [add_opt.values for add_opt in self.inputs if add_opt.value.strip()]
+        # 辞書の内容を取得
+        options = votes[msg_id]["options"]
+        reactions = votes[msg_id]["reactions"]
+        
+        # リアクションリストを更新
+        add_reacts = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"][len(options)+1:len(add_options)]
+        for i, add_opt in enumerate(add_options):
+        if add_opt:
+            first_char = add_opt[0]
+            if first_char in emoji.EMOJI_DATA:
+                # 選択肢の最初の文字が絵文字の場合、その絵文字をリアクションに差替
+                add_react[i] = first_char
+                # 選択肢から最初の文字を削除
+                add_options[i] = add_opt[1:]
+
+        # 選択肢リストを更新
+        options.extend(add_options)
+        reaction.extend(add_reaction)
+        
+        # embedを書き換え
+        
+
+#=====投票選択モード切替=====
 class VoteSelectMode(Enum):
     MID_RESULT = "mid_result"
     FINAL_RESULT = "final_result"
     PROXY_VOTE = "proxy_vote"
     CANCEL_PROXY_VOTE = "cancel_proxy_vote"
+    ADD_OPTION = "add_option"
 
 #====================
 # イベントハンドラ
@@ -948,9 +999,11 @@ async def vote(interaction: discord.Interaction,
      question: str, opt_1: str, opt_2: str=None, opt_3: str=None, opt_4: str=None, opt_5: str=None,
      opt_6: str=None, opt_7: str=None, opt_8: str=None, opt_9: str=None, opt_10: str=None): 
     # 選択肢をリストに格納
-    options = [opt_1, opt_2, opt_3, opt_4, opt_5, opt_6, opt_7, opt_8, opt_9, opt_10]
+    opts = [opt_1, opt_2, opt_3, opt_4, opt_5, opt_6, opt_7, opt_8, opt_9, opt_10]
+    options = [opt for opt in opts if opt and opt.strip()]
     # リアクションリスト
-    reactions = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+    reacts = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+    reactions = reacts[:len(options)]
     # 選択肢表示を初期化
     description = ""
 
@@ -961,8 +1014,7 @@ async def vote(interaction: discord.Interaction,
                 # 選択肢の最初の文字が絵文字の場合、その絵文字をリアクションに差替
                 reactions[i] = first_char
                 # 選択肢から最初の文字を削除
-                o = opt[1:]
-                options[i] = o
+                options[i] = opt[1:]
 
     # Embedで出力
     for i, opt in enumerate(options):
