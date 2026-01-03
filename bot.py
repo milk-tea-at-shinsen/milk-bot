@@ -778,9 +778,9 @@ class VoteSelect(View):
                 await interaction.followup.send(f"**{self.voter}** の分の代理投票を取り消したよ🫡")
             else:
                 await interaction.followup.send(f"取り消せる代理投票がないみたい🥺")
+        # 投票選択肢追加
         elif self.mode == VoteSelectMode.ADD_OPTION:
-            view = AddOptionInput(msg_id)
-            await interaction.response.send_message("追加する選択肢を入力してね", view=view)
+            await interaction.response.send_modal(AddOptionInput(msg_id))
         else:
             await interaction.response.defer()
             # 集計
