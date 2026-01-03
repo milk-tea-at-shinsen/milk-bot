@@ -762,16 +762,17 @@ class VoteSelect(View):
     
     # 投票選択後処理の関数定義
     async def select_callback(self, interaction: discord.Interaction):
-        await interaction.response.defer()
         msg_id = int(interaction.data["values"][0])
 
         # 代理投票と集計で処理を分岐
         # 代理投票
         if self.mode == VoteSelectMode.PROXY_VOTE:
+            await interaction.response.defer()
             view = VoteOptionSelect(msg_id, self.voter, self.agent_id)
             await interaction.followup.send("代理投票する選択肢を選んでね", view=view)
         # 代理投票キャンセル
         elif self.mode == VoteSelectMode.CANCEL_PROXY_VOTE:
+            await interaction.response.defer()
             removed = cancel_proxy_vote(msg_id, self.voter, self.agent_id)
             if removed:
                 await interaction.followup.send(f"**{self.voter}** の分の代理投票を取り消したよ🫡")
@@ -779,8 +780,9 @@ class VoteSelect(View):
                 await interaction.followup.send(f"取り消せる代理投票がないみたい🥺")
         elif self.mode == VoteSelectMode.ADD_OPTION:
             view = AddOptionInput(msg_id)
-            await interaction.followup.send("追加する選択肢を入力してね", view=view)
+            await interaction.response.send_message("追加する選択肢を入力してね", view=view)
         else:
+            await interaction.response.defer()
             # 集計
             dt, result = await make_vote_result(interaction, msg_id)
 
