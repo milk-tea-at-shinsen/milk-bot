@@ -755,17 +755,17 @@ class VoteSelect(View):
         else:
             # 集計処理
             dt, result = await make_vote_result(interaction, msg_id)
-            
+
             # 結果表示処理
             if self.mode == VoteSelectMode.MID_RESULT:
                 mode = "mid"
             else:
                 mode = "final"
             await show_vote_result(interaction, dt, result, msg_id, mode)
-            
+
             # CSV作成処理
             await export_vote_csv(interaction, result, msg_id, dt, mode)
-            
+
             # 投票辞書からの削除
             if self.mode == VoteSelectMode.FINAL_RESULT:
                 remove_vote(msg_id)
@@ -794,11 +794,11 @@ class VoteOptionSelect(View):
             label = f"{reaction} {option[:50]}"
             # 選択時に格納される値を設定
             value = str(i)
-            
+
             # optionsリストに表示項目と値を格納
             if option != "":
                 options.append(discord.SelectOption(label=label, value=value))
-        
+
         # selectUIの定義
         if options:
             select = Select(
@@ -864,7 +864,14 @@ async def on_ready():
     app_commands.Choice(name="時間", value="hour"),
     app_commands.Choice(name="分", value="minute")
 ])
-async def remind(interaction: discord.Interaction, date: str, time: str, msg: str, channel: discord.TextChannel = None, repeat: str = None, interval: int = 0):
+async def remind(
+    interaction: discord.Interaction,
+    date: str,
+    time: str,
+    msg: str,
+    channel: discord.TextChannel = None,
+    repeat: str = None,
+    interval: int = 0):
     # 文字列引数からdatatime型に変換
     dt = datetime.strptime(f"{date} {time}", "%Y/%m/%d %H:%M").replace(tzinfo=JST)
 
