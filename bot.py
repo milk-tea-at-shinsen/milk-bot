@@ -872,8 +872,10 @@ class AddOptionInput(discord.ui.Modal):
 
     # 選択肢入力後の処理
     async def on_submit(self, interaction: discord.Interaction):
+        print("[start: on submit]")
         # 追加選択肢をリスト化
         add_options = [add_opt.value for add_opt in self.inputs if add_opt.value.strip()]
+        print(f"add_options: {add_options}")
         # 辞書の内容を取得
         options = votes[self.msg_id]["options"]
         reactions = votes[self.msg_id]["reactions"]
@@ -881,6 +883,7 @@ class AddOptionInput(discord.ui.Modal):
         # リアクションリストを更新
         add_reactions = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"][len(options) : len(options) + len(add_options)]
         add_reactions = reaction_replace(add_options, add_reactions)
+        print(f"add_reactions: {add_reactions}")
 
         # 選択肢リストを更新
         options.extend(add_options)
@@ -893,10 +896,12 @@ class AddOptionInput(discord.ui.Modal):
 
         # embedを表示
         message = await discord.channel.fetch_message(msg_id)
+        print(f"message: {message}")
         message.edit(embed = embed)
 
         # 辞書の更新
         add_vote(msg_id, question, reactions, options)
+        print(f"votes: {votes}")
 
 #=====投票選択モード切替=====
 class VoteSelectMode(Enum):
