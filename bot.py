@@ -747,6 +747,11 @@ class VoteSelect(View):
                     placeholder="代理投票する投票を選んでね",
                     options = options
                 )
+            elif mode == VoteSelectMode.ADD_OPTION:
+                select = Select(
+                    placeholder="選択肢を追加する投票を選んでね",
+                    options = options
+                )
             else:
                 select = Select(
                     placeholder="集計する投票を選んでね",
@@ -848,7 +853,7 @@ class VoteOptionSelect(View):
 #=====追加選択肢入力=====
 class AddOptionInput(discord.ui.Modal):
     # クラスの初期設定
-    def __init__(self, msg_id, votes):
+    def __init__(self, msg_id):
         super().__init__(title="追加する選択肢を入力してね")
         # msg_idプロパティにメッセージIDをセット
         self.msg_id = msg_id
@@ -1046,10 +1051,10 @@ async def vote(interaction: discord.Interaction,
 async def vote_add_option(interaction: discord.Interaction):
     if vote:
         view = VoteSelect(votes=votes, mode=VoteSelectMode.ADD_OPTION, voter=None, agent_id=None)
-        await interaction.response.send_message("どの投票に選択肢を追加するか選んでね", view=view)
+        await interaction.response.send_message("選択肢を追加する投票を選んでね", view=view)
     # 投票がない場合のメッセージ
     else:
-        await interaction.response.send_message("集計できる投票がないみたい🥺")
+        await interaction.response.send_message("投票がないみたい🥺")
 
 #=====/vote_result コマンド=====
 @bot.tree.command(name="vote_result", description="投票結果を表示するよ")
