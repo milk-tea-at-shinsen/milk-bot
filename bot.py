@@ -242,9 +242,11 @@ async def handle_remove_reminder(interaction, dt, idx):
         removed = remove_reminder(dt, idx)
 
         # 削除完了メッセージの送信
-        await interaction.message.edit(
+        await interaction.message.delete()
+        await interaction.followup.send(
             content=f"リマインダーを削除したよ🫡: {dt.strftime('%Y/%m/%d %H:%M')} - {removed['msg']}",
-            allowed_mentions=discord.AllowedMentions.none()
+            allowed_mentions=discord.AllowedMentions.none(),
+            ephemeral=True
         )
 
 #=====通知用ループ処理=====
@@ -748,7 +750,7 @@ class ReminderSelect(View):
         #selectUIの定義
         if options:
             select = Select(
-                placeholder="削除するリマインダーを選んでね",
+                placeholder="リマインダーを選択",
                 options = options
             )
             select.callback = self.select_callback
@@ -795,26 +797,10 @@ class VoteSelect(View):
         
         #selectUIの定義
         if options:
-            if mode == VoteSelectMode.PROXY_VOTE:
-                select = Select(
-                    placeholder="代理投票する投票を選んでね",
-                    options = options
-                )
-            elif mode == VoteSelectMode.ADD_OPTION:
-                select = Select(
-                    placeholder="選択肢を追加する投票を選んでね",
-                    options = options
-                )
-            elif mode == VoteSelectMode.DELETE_VOTE:
-                select = Select(
-                    placeholder="削除する投票を選んでね",
-                    options = options
-                )
-            else:
-                select = Select(
-                    placeholder="集計する投票を選んでね",
-                    options = options
-                )
+            select = Select(
+                placeholder="投票を選択",
+                options = options
+            )
             select.callback = self.select_callback
             self.add_item(select)
     
@@ -834,12 +820,14 @@ class VoteSelect(View):
             if removed:
                 await interaction.message.edit(content=f"**{self.voter}** の分の代理投票を取り消したよ🫡")
             else:
-                await interaction.message.edit(content=f"⚠️取り消せる代理投票がないよ", ephemeral=True)
+                await interaction.message.delete()
+                await interaction.followup.send(content=f"⚠️取り消せる代理投票がないよ", ephemeral=True)
         # 投票選択肢追加
         elif self.mode == VoteSelectMode.ADD_OPTION:
             lim = min(5, 10 - len(votes[msg_id]["options"]))
             if lim == 0:
-                await interaction.message.edit(content="️⚠️これ以上選択肢を増やせないよ", view=None, ephemeral=True)
+                await interaction.message.delete()
+                await interaction.followup.send(content="️⚠️これ以上選択肢を増やせないよ", view=None, ephemeral=True)
                 return
             await interaction.response.send_modal(AddOptionInput(msg_id, lim))
         # 削除
@@ -898,7 +886,7 @@ class VoteOptionSelect(View):
         # selectUIの定義
         if options:
             select = Select(
-                placeholder="代理投票する選択肢を選んでね",
+                placeholder="代理投票する選択肢を選択(複数選択可)",
                 min_values = 1,
                 max_values = len(options),
                 options = options
@@ -1043,7 +1031,9 @@ async def remind(
     # add_reminder関数に渡す
     add_reminder(dt, repeat, interval, channel_id, msg)
 
-    await interaction.response.send_message(f"**{dt.strftime('%Y/%m/%d %H:%M')}** にリマインダーをセットしたよ🫡")
+    await interaction.response.send_message(
+        content=f"**{dt.strftime('%Y/%m/%d %H:%M')}** にリマインダーをセットしたよ🫡",
+        ephemeral=True)
     print(f"予定を追加: {reminders[dt]}")
 
 #=====/reminder_list コマンド=====
@@ -1188,6 +1178,7 @@ async def cancel_proxy(interaction: discord.Interaction, voter: str):
 async def delete_vote(ctx):
     if votes:
         view = VoteSelect(mode=VoteSelectMode.DELETE_VOTE, voter=None, agent_id=None)
+        await ctx.message.delete()
         await ctx.send("どの投票を削除するか選んでね", view=view)
     else:
         await ctx.send("⚠️取り消しできる投票がないよ", ephemeral=True)
@@ -1220,8 +1211,8 @@ async def export_members(interaction: discord.Interaction):
         "members_at": guild.name,
         "collected_at": datetime.now(JST).strftime("%Y/%m/%d %H:%M")
     }
-    header = ["user_id", "display_name"]
-    rows = [[member.id, member.display_name] async for member in guild.fetch_members(limit=None)]
+    header = ["user_id", "user_name", "display_name", "is_bot"]
+    rows = [[member.id, member.name, member.display_name, member.bot] async for member in guild.fetch_members(limit=None)]
     
     make_csv(filename, rows, meta, header)
     
