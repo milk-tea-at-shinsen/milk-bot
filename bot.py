@@ -300,7 +300,7 @@ def reaction_replace(options, reactions):
                 options[i] = opt[1:]
     
     # リアクションの重複があった場合はデフォルト絵文字に戻す
-    default_reactions = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+    default_reactions = [1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
     duplicate_flag = False
     if len(reactions) != len(set(reactions)):
         duplicate_flag = True
@@ -314,6 +314,21 @@ def reaction_replace(options, reactions):
             duplicate_flag = False
 
     return options, reactions
+
+#=====メンションの解決=====
+async def resolve_mention(guild, user):
+    if isinstance(user, discord.Member):
+        return user.mention
+    
+    try:
+        member = guild.get_member(user.id)
+        if member:
+            return member.mention
+        else:
+            member = await guild.fetch_member(user.id)
+            return member.mention
+    except:
+        return f"<@{user.id}>"
 
 #=====投票選択肢embed作成=====
 def make_embed_text(options, reactions, question, description):
@@ -345,7 +360,7 @@ async def make_vote_result(interaction, msg_id):
         # リアクション投票分
         # リアクションしたユーザーがbotでなければリストに追加
         reaction_users = [reaction_user async for reaction_user in reaction.users() if reaction_user != bot.user]
-        users = [user.mention for user in reaction_users]
+        users = [await resolve_mention(guild, user) for user in reaction_users]
         display_names = [user.display_name for user in reaction_users]
         
         # 代理投票分
