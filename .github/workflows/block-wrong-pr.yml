@@ -1,0 +1,39 @@
+name: Block wrong PR directions
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+jobs:
+  block_wrong_direction:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR direction
+        run: |
+          BASE="${{ github.base_ref }}"
+          HEAD="${{ github.head_ref }}"
+
+          echo "Base branch: $BASE"
+          echo "Head branch: $HEAD"
+
+          # dev → release → main → dev の三角構造以外は全部禁止
+
+          # 1. main に向かう PR は release からのみ許可
+          if [ "$BASE" = "main" ] && [ "$HEAD" != "release" ]; then
+            echo "❌ main への PR は release からのみ許可されています"
+            exit 1
+          fi
+
+          # 2. release に向かう PR は dev からのみ許可
+          if [ "$BASE" = "release" ] && [ "$HEAD" != "dev" ]; then
+            echo "❌ release への PR は dev からのみ許可されています"
+            exit 1
+          fi
+
+          # 3. dev に向かう PR は main からのみ許可
+          if [ "$BASE" = "dev" ] && [ "$HEAD" != "main" ]; then
+            echo "❌ dev への PR は main からのみ許可されています"
+            exit 1
+          fi
+
+          echo "✔ 許可された PR です"
