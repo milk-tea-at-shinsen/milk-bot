@@ -365,7 +365,7 @@ def make_listed_rows(result):
 #---CSV作成処理---
 def make_csv(filename, rows, meta=None, header=None):
     print("[start: make_csv]")
-    with open(filename, "w", newline="", encoding="utf-8") as f:
+    with open(filename, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
         # metaの書込
         if meta:
@@ -446,7 +446,7 @@ def cluster_lines(symbols, avr_height):
         if line_y is None:
             line_y =symbol["y"]
         # 行のy座標範囲内ならlineに追加
-        if abs(symbol["y"] - line_y) < avr_height * 1.5:
+        if abs(symbol["y"] - line_y) < avr_height:
             line.append(symbol)
             line_y = (line_y + symbol["y"]) / 2
         # 行のy座標範囲外ならlinesにlineを追加してlineをリセット
@@ -522,6 +522,15 @@ def extract_table_from_image(image_content):
         rows = extract_table_body(rows)
         return rows
 
+#---重複行削除処理---
+def remove_duplicate_rows(rows):
+    print("[start: remove_duplicate_rows]")
+    unique_rows = []
+    for row in rows:
+        if row not in unique_rows:
+            unique_rows.append(row)
+    return unique_rows
+    
 #=====通知用ループ処理=====
 async def reminder_loop():
     await bot.wait_until_ready()
@@ -944,23 +953,29 @@ async def export_members(interaction: discord.Interaction):
         file=discord.File(filename)
     )
     
-#=====/ocr コマンド=====
-@bot.tree.context_menu(name="OCR",)
-async def ocr(interaction: discord.Interaction, message: discord.Message):
+#=====/table_ocr コマンド=====
+@bot.tree.context_menu(name="table_ocr",)
+async def table_ocr(interaction: discord.Interaction, message: discord.Message):
     await interaction.response.defer()
     
     if not message.attachments:
         await interaction.response.send("画像が添付されてないよ(´･ω･`)")
         return
 
-    attachment = message.attachments[0]
+    # 画像ごとにOCR処理を実行してtemp_rowsに格納
+    temp_rows = []
+    for i, attachment in enumerate(message.attachments):
+        attachment = message.attachments[i]
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(attachment.url) as resp:
+                content = await resp.read()
     
-    async with aiohttp.ClientSession() as session:
-        async with session.get(attachment.url) as resp:
-            content = await resp.read()
-    
-    # visionからテキストを受け取ってCSV用に整形
-    rows = extract_table_from_image(content)
+        # visionからテキストを受け取ってCSV用に整形
+        temp_rows.extend(extract_table_from_image(content))
+    print(f"temp_rows:{temp_rows}")
+    # 重複行を削除
+    rows = remove_duplicate_rows(temp_rows)
     print(f"rows:{rows}")
     
     # csv作成処理
