@@ -731,9 +731,16 @@ def extract_table_body(rows):
     return table_body
 
 #=====OCR->CSV用データ作成処理=====
-def extract_table_from_image(image_content):
+async def extract_table_from_image(image_content):
+    print("[start: extract_table_from_image]")
+    loop = asyncio.get_running_loop()
     image = vision.Image(content=image_content)
-    response = client.document_text_detection(image=image)
+
+    # Vision APIをスレッドで実行
+    response = await loop.run_in_executor(
+        None,
+        lambda: client.document_text_detection(image=image)
+    )
 
     # symbolsを取得
     symbols = get_symbols(response)
@@ -1335,7 +1342,8 @@ async def table_ocr(interaction: discord.Interaction, counts: str = None, minute
     # visionからテキストを受け取ってCSV用に整形
     temp_rows = []
     for content in all_contents:
-        temp_rows.extend(extract_table_from_image(content))
+        rows = await extract_table_from_image(content)
+        temp_rows.extend(rows)
 
     # 重複行を削除
     rows = remove_duplicate_rows(temp_rows)
