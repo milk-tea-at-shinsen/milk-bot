@@ -74,6 +74,20 @@ else:
     proxy_votes = {}
 print(f"dict proxy_votes: {proxy_votes}")
 
+#---リスト化対象チャンネル辞書---
+data_raw = load_data("make_list_channels")
+try:
+    if data_raw:
+        make_list_channels = {key: value for key, value in data_raw.items()}
+    else:
+        make_list_channels = {"channels": []}
+        print(f"make_list_channels: {make_list_channels}")
+except:
+    make_list_channels = {"channels": []}
+    print(f"make_list_channels: {make_list_channels}")
+
+print(f"dict make_list_channels: {make_list_channels}")
+
 #===============
 # 共通処理関数
 #===============
@@ -100,10 +114,14 @@ def save_reminders():
 def save_votes():
     export_data(votes, "votes")
 
-#---投票---
+#---代理投票---
 def save_proxy_votes():
     export_data(proxy_votes, "proxy_votes")
-    
+
+#---リスト化対象チャンネル---
+def save_make_list_channels():
+    export_data(make_list_channels, "make_list_channels")
+
 #=====辞書への登録処理=====
 #---リマインダー---
 def add_reminder(dt, repeat, interval, channel_id, msg):
@@ -133,8 +151,8 @@ def add_vote(msg_id, question, reactions, options):
     save_votes()
 
 #---代理投票---
-def add_proxy_votes(msg_id, voter, agent_id, opt_idx):
-    print("[start: add_proxy_votes]")
+def add_proxy_vote(msg_id, voter, agent_id, opt_idx):
+    print("[start: add_proxy_vote]")
     # msg_idが辞書になければ辞書に行を追加
     if msg_id not in proxy_votes:
         proxy_votes[msg_id] = {}
@@ -147,6 +165,16 @@ def add_proxy_votes(msg_id, voter, agent_id, opt_idx):
 
     # json保存前処理
     save_proxy_votes()
+
+#---リスト化対象チャンネル---
+def add_make_list_channel(channel_id):
+    # 辞書に項目を登録
+    if channel_id not in make_list_channels["channels"]:
+        make_list_channels["channels"].append(channel_id)
+        print(f"make_list_channels: {make_list_channels}")
+
+    # json保存前処理
+    save_make_list_channels()
 
 #=====辞書からの削除処理=====
 #---リマインダー---
@@ -201,7 +229,7 @@ def remove_proxy_vote(msg_id):
         print(f"削除対象の代理投票がありません")
         return None
 
-#---代理投票個別投票キャンセル---
+#---代理投票個別投票---
 def cancel_proxy_vote(msg_id, voter, agent_id):
     print("[start: cancel_proxy_vote]")
     if msg_id in proxy_votes:
@@ -215,6 +243,18 @@ def cancel_proxy_vote(msg_id, voter, agent_id):
             else:
                 print(f"キャンセル対象の代理投票がありません")
                 return None
+
+#---リスト化対象チャンネル---
+def remove_make_list_channel(channel_id, channel_name):
+    print("[start: remove_make_list_channel]")
+    if channel_id in make_list_channels["channels"]:
+        make_list_channels["channels"].remove(channel_id)
+        save_make_list_channels()
+        print(f"リスト化対象から削除: {channel_name}")
+        return channel_name
+    else:
+        print(f"削除対象のチャンネルがありません")
+        return None
 
 #=====CSV作成処理=====
 def make_csv(filename, rows, meta=None, header=None):
@@ -719,6 +759,30 @@ def remove_duplicate_rows(rows):
             unique_rows.append(row)
     return unique_rows
 
+#---------------
+# リスト化関係
+#---------------
+async def handle_make_list(message):
+    print("[start: hamdle_make_list]")
+    # 改行ごとに分けてリスト化
+    lines = message.content.split("\n")
+    print(f"lines: {lines}")
+    
+    # 行頭記号リスト
+    bullet = ["-", "*", "+", "•", "・", "○", "◯", "○"]
+    
+    # 空白を除去し、箇条書き化
+    for line in lines:
+        line = line.strip()
+        print(f"line: {line}")
+        if line[:1] in bullet:
+            line = line[1:]
+            print(f"line: {line}")
+        if line:
+            await message.channel.send(f"- {line}")
+    
+    await message.delete()
+
 #===============
 # クラス定義
 #===============
@@ -901,7 +965,7 @@ class VoteOptionSelect(View):
         
         opt_idx = [int(opt_str) for opt_str in interaction.data["values"]]
         
-        add_proxy_votes(self.msg_id, self.voter, self.agent_id, opt_idx)
+        add_proxy_vote(self.msg_id, self.voter, self.agent_id, opt_idx)
         agent = guild.get_member(self.agent_id)
         agent_display_name = agent.display_name
         await interaction.message.edit(content=f"**{agent_display_name}** から **{self.voter}** の分の投票を受け付けたよ🫡")
@@ -974,7 +1038,7 @@ class VoteSelectMode(Enum):
 #====================
 # イベントハンドラ
 #====================
-# Bot起動確認
+# Bot起動時処理
 @bot.event
 async def on_ready():
     synced = await bot.tree.sync()
@@ -984,6 +1048,23 @@ async def on_ready():
     # リマインダーループの開始
     print(f"ループ開始: {datetime.now(JST)}")
     bot.loop.create_task(reminder_loop())
+
+#  メッセージ受信時処理
+@bot.event
+async def on_message(message):
+    print("[start: on_message]")
+    # Botのメッセージは無視
+    if message.author.bot:
+        return
+
+    # コマンドは無視
+    if message.content.startswith("!"):
+        await bot.process_commands(message)
+        return
+
+    # メッセージがリスト化対象チャンネルに投稿された場合、リスト化処理を行う
+    if message.channel.id in make_list_channels["channels"]:
+        await handle_make_list(message)
 
 #===============
 # コマンド定義
@@ -1186,6 +1267,10 @@ async def delete_vote(ctx):
 #=====context_reaction_count コマンド=====
 @bot.tree.context_menu(name="context_reaction_count")
 async def context_reaction_count(interaction: discord.Interaction, message: discord.Message):
+    if not message.reactions:
+        await interaction.response.send_message(content="️⚠️リアクションがついてないよ", ephemeral=True)
+        return
+
     await interaction.response.defer()
     print(message)
     msg_id = message.id
@@ -1195,7 +1280,6 @@ async def context_reaction_count(interaction: discord.Interaction, message: disc
     await show_vote_result(interaction, dt, result, msg_id, "mid")
     # CSV作成処理
     await export_vote_csv(interaction, result, msg_id, dt, "mid")
-    
 
 #---------------
 # メンバーリスト関係
@@ -1269,11 +1353,12 @@ async def table_ocr(interaction: discord.Interaction, counts: str = None, minute
 #=====context_ocr コマンド=====
 @bot.tree.context_menu(name="context_ocr")
 async def context_ocr(interaction: discord.Interaction, message: discord.Message):
-    await interaction.response.defer()
-    
+
     if not message.attachments:
-        await interaction.response.send("⚠️画像が添付されてないよ", ephemeral=True)
+        await interaction.response.send_message(content="⚠️画像が添付されてないよ", ephemeral=True)
         return
+
+    await interaction.response.defer()
 
     # 画像ごとにOCR処理を実行してtemp_rowsに格納
     temp_rows = []
@@ -1298,6 +1383,45 @@ async def context_ocr(interaction: discord.Interaction, message: discord.Message
         content="OCR結果のCSVだよ🫡",
         file=discord.File(filename)
     )
+
+#---------------
+# リスト化関係
+#---------------
+@bot.command()
+async def add_listed_ch(ctx):
+    channel_id = ctx.channel.id
+    print(f"channel_id: {channel_id}")
+    channel_name = ctx.channel.name
+    print(f"channel_name: {channel_name}")
+    
+    add_make_list_channel(channel_id)
+    
+    await ctx.message.delete()
+    await ctx.send(f"{channel_name}をリスト化対象にしたよ🫡\n今後は改行ごとに別の項目としてリスト化されるよ\n---")
+
+@bot.command()
+async def remove_listed_ch(ctx):
+    channel_id = ctx.channel.id
+    print(f"channel_id: {channel_id}")
+    channel_name = ctx.channel.name
+    print(f"channel_name: {channel_name}")
+    
+    remove_ch = remove_make_list_channel(channel_id, channel_name)
+    
+    if remove_ch:
+        await ctx.message.delete()
+        await ctx.send(f"{channel_name}をリスト化対象から削除したよ🫡")
+    else:
+        await ctx.message.delete()
+        await ctx.send(content=f"⚠️{channel_name}はリスト化対象ではないよ", ephemeral=True)
+
+@bot.tree.context_menu(name="remove_from_list")
+async def remove_from_list(interaction: discord.Interaction, message: discord.Message):
+    if message.channel.id in make_list_channels["channels"]:
+        await message.delete()
+        await interaction.response.send_message(content=f"{message.content}を削除したよ🫡", ephemeral=True)
+    else:
+        await interaction.response.send_message(content=f"️⚠️リストの項目以外は削除できないよ", ephemeral=True)
 
 # Botを起動
 bot.run(os.getenv("DISCORD_TOKEN"))
