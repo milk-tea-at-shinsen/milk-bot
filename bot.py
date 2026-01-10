@@ -1341,7 +1341,7 @@ async def table_ocr(interaction: discord.Interaction, counts: str = None, minute
 
     # visionからテキストを受け取ってCSV用に整形
     temp_rows = []
-    async for content in all_contents:
+    for content in all_contents:
         rows = await extract_table_from_image(content)
         temp_rows.extend(rows)
 
