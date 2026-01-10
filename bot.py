@@ -300,7 +300,7 @@ def reaction_replace(options, reactions):
                 options[i] = opt[1:]
     
     # リアクションの重複があった場合はデフォルト絵文字に戻す
-    default_reactions = [1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+    default_reactions = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
     duplicate_flag = False
     if len(reactions) != len(set(reactions)):
         duplicate_flag = True
@@ -360,8 +360,7 @@ async def make_vote_result(interaction, msg_id):
         # リアクション投票分
         # リアクションしたユーザーがbotでなければリストに追加
         reaction_users = [reaction_user async for reaction_user in reaction.users() if reaction_user != bot.user]
-        users = [await resolve_mention(guild, user) for user in reaction_users]
-        display_names = [user.display_name for user in reaction_users]
+        users = [user.display_name for user in reaction_users]
         
         # 代理投票分
         if msg_id in proxy_votes:
@@ -385,7 +384,6 @@ async def make_vote_result(interaction, msg_id):
                             agent_display_name = "Unknown"
             
                         users.append(f"{voter}(by{agent_display_name})")
-                        display_names.append(f"{voter}(by{agent_display_name})")
 
         if options:
             result[i] = {
@@ -393,7 +391,6 @@ async def make_vote_result(interaction, msg_id):
                 "option": options[i],
                 "count": len(users),
                 "users": users,
-                "display_names": display_names
             }
         else:
             result[i] = {
@@ -401,7 +398,6 @@ async def make_vote_result(interaction, msg_id):
                 "option": f"選択肢[{i+1}]",
                 "count": len(users),
                 "users": users,
-                "display_names": display_names
             }
     dt = datetime.now(JST)
     return dt, result
@@ -470,10 +466,7 @@ def make_grouped_rows(result):
         # 選択肢を連結
         header.append(value["option"])
         # 選択肢ごとの選択肢を連結
-        if value.get("display_names") is None:
-            users.append(value["users"])
-        else:
-            users.append(value["display_names"])
+        users.append(value["users"])
         # ユーザーの最大値を取得
         if len(value["users"]) > max_users:
             max_users = len(value["users"])
@@ -497,7 +490,7 @@ def make_listed_rows(result):
     rows = [
         [value["option"], user]
          for key, value in result.items()
-         for user in value["display_names"]
+         for user in value["users"]
     ]
     
     return header, rows
