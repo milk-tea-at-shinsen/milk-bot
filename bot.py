@@ -289,11 +289,32 @@ async def reminder_loop():
 #---------------
 # 投票関係
 #---------------
+#=====リアクションと絵文字を差し替え=====
+def reaction_replace(options, reactions):
+    for i, opt in enumerate(options):
+        if opt:
+            first_char = opt[0]
+            if first_char in emoji.EMOJI_DATA:
+                # 選択肢の最初の文字が絵文字の場合、その絵文字をリアクションに差替
+                reactions[i] = first_char
+                # 選択肢から最初の文字を削除
+                options[i] = opt[1:]
+    return reactions
+
+#=====投票選択肢embed作成=====
+def make_embed_text(options, reactions, question, description):
+    for i, opt in enumerate(options):
+        if opt:
+            description += f"{reactions[i]} {opt}\n"
+    embed = discord.Embed(title=question, description=description, color=discord.Color.green())
+    return embed
+
 #=====投票集計=====
 async def make_vote_result(interaction, msg_id):
     print("[start: make_vote_result]")
     # 投票辞書を読み込み
     options = votes[msg_id]["options"]
+    print(f"votes: {votes}")
     # メッセージを読み込み
     message = await interaction.channel.fetch_message(msg_id)
     # サーバー情報を読み込み
@@ -697,10 +718,8 @@ class ReminderSelect(View):
 #=====投票選択=====
 class VoteSelect(View):
     # クラスの初期設定
-    def __init__(self, votes, mode, voter=None, agent_id=None):
+    def __init__(self, mode, voter=None, agent_id=None):
         super().__init__()
-        # votesプロパティに投票辞書をセット
-        self.votes = votes
         # modeプロパティに投票モードをセット
         self.mode = mode
         # voterプロパティに投票者名をセット
@@ -727,6 +746,11 @@ class VoteSelect(View):
                     placeholder="代理投票する投票を選んでね",
                     options = options
                 )
+            elif mode == VoteSelectMode.ADD_OPTION:
+                select = Select(
+                    placeholder="選択肢を追加する投票を選んでね",
+                    options = options
+                )
             else:
                 select = Select(
                     placeholder="集計する投票を選んでね",
@@ -737,35 +761,40 @@ class VoteSelect(View):
     
     # 投票選択後処理の関数定義
     async def select_callback(self, interaction: discord.Interaction):
-        await interaction.response.defer()
         msg_id = int(interaction.data["values"][0])
 
         # 代理投票と集計で処理を分岐
+        # 代理投票
         if self.mode == VoteSelectMode.PROXY_VOTE:
-            # 代理投票処理
+            await interaction.response.defer()
             view = VoteOptionSelect(msg_id, self.voter, self.agent_id)
             await interaction.followup.send("代理投票する選択肢を選んでね", view=view)
         # 代理投票キャンセル
         elif self.mode == VoteSelectMode.CANCEL_PROXY_VOTE:
+            await interaction.response.defer()
             removed = cancel_proxy_vote(msg_id, self.voter, self.agent_id)
             if removed:
                 await interaction.followup.send(f"**{self.voter}** の分の代理投票を取り消したよ🫡")
             else:
                 await interaction.followup.send(f"取り消せる代理投票がないみたい🥺")
+        # 投票選択肢追加
+        elif self.mode == VoteSelectMode.ADD_OPTION:
+            await interaction.response.send_modal(AddOptionInput(msg_id))
         else:
-            # 集計処理
+            await interaction.response.defer()
+            # 集計
             dt, result = await make_vote_result(interaction, msg_id)
-            
+
             # 結果表示処理
             if self.mode == VoteSelectMode.MID_RESULT:
                 mode = "mid"
             else:
                 mode = "final"
             await show_vote_result(interaction, dt, result, msg_id, mode)
-            
+
             # CSV作成処理
             await export_vote_csv(interaction, result, msg_id, dt, mode)
-            
+
             # 投票辞書からの削除
             if self.mode == VoteSelectMode.FINAL_RESULT:
                 remove_vote(msg_id)
@@ -776,8 +805,6 @@ class VoteOptionSelect(View):
     # クラスの初期設定
     def __init__(self, msg_id, voter, agent_id):
         super().__init__()
-        # votesプロパティに投票辞書をセット
-        self.votes = votes
         # msg_idプロパティにメッセージIDをセット
         self.msg_id = msg_id
         # voterプロパティに投票者名をセット
@@ -794,11 +821,11 @@ class VoteOptionSelect(View):
             label = f"{reaction} {option[:50]}"
             # 選択時に格納される値を設定
             value = str(i)
-            
+
             # optionsリストに表示項目と値を格納
             if option != "":
                 options.append(discord.SelectOption(label=label, value=value))
-        
+
         # selectUIの定義
         if options:
             select = Select(
@@ -822,12 +849,68 @@ class VoteOptionSelect(View):
         agent_display_name = agent.display_name
         await interaction.followup.send(f"**{agent_display_name}** から **{self.voter}** の分の投票を受け付けたよ🫡")
 
-#=====集計モード切替=====
+#=====追加選択肢入力=====
+class AddOptionInput(discord.ui.Modal):
+    # クラスの初期設定
+    def __init__(self, msg_id):
+        super().__init__(title="追加する選択肢を入力してね")
+        # msg_idプロパティにメッセージIDをセット
+        self.msg_id = msg_id
+ 
+        # ModalUIの定義
+        self.inputs = []
+        for i in range(5):
+            text = discord.ui.TextInput(
+                label=f"選択肢{i+1}",
+                required=(i == 0)
+            )
+            self.inputs.append(text)
+            self.add_item(text)
+
+    # 選択肢入力後の処理
+    async def on_submit(self, interaction: discord.Interaction):
+        print("[start: on submit]")
+        # 追加選択肢をリスト化
+        add_options = [add_opt.value for add_opt in self.inputs if add_opt.value.strip()]
+        print(f"add_options: {add_options}")
+        # 辞書の内容を取得
+        options = votes[self.msg_id]["options"]
+        reactions = votes[self.msg_id]["reactions"]
+        
+        # リアクションリストを更新
+        add_reactions = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"][len(options) : len(options) + len(add_options)]
+        add_reactions = reaction_replace(add_options, add_reactions)
+        print(f"add_reactions: {add_reactions}")
+
+        # 選択肢リストを更新
+        options.extend(add_options)
+        reactions.extend(add_reactions)
+
+        # embedを書き換え
+        question = votes[self.msg_id]["question"]
+        description = ""
+        embed = make_embed_text(options, reactions, question, description)
+
+        # embedを表示
+        message = await interaction.channel.fetch_message(self.msg_id)
+        print(f"message: {message}")
+        await message.edit(embed = embed)
+        # リアクションを追加
+        for i in range(len(add_options)):
+            await message.add_reaction(add_reactions[i])
+        await interaction.response.send_message("投票に選択肢を追加したよ🫡")
+
+        # 辞書の更新
+        add_vote(self.msg_id, question, reactions, options)
+        print(f"votes: {votes}")
+
+#=====投票選択モード切替=====
 class VoteSelectMode(Enum):
     MID_RESULT = "mid_result"
     FINAL_RESULT = "final_result"
     PROXY_VOTE = "proxy_vote"
     CANCEL_PROXY_VOTE = "cancel_proxy_vote"
+    ADD_OPTION = "add_option"
 
 #====================
 # イベントハンドラ
@@ -864,7 +947,14 @@ async def on_ready():
     app_commands.Choice(name="時間", value="hour"),
     app_commands.Choice(name="分", value="minute")
 ])
-async def remind(interaction: discord.Interaction, date: str, time: str, msg: str, channel: discord.TextChannel = None, repeat: str = None, interval: int = 0):
+async def remind(
+    interaction: discord.Interaction,
+    date: str,
+    time: str,
+    msg: str,
+    channel: discord.TextChannel = None,
+    repeat: str = None,
+    interval: int = 0):
     # 文字列引数からdatatime型に変換
     dt = datetime.strptime(f"{date} {time}", "%Y/%m/%d %H:%M").replace(tzinfo=JST)
 
@@ -941,37 +1031,37 @@ async def vote(interaction: discord.Interaction,
      question: str, opt_1: str, opt_2: str=None, opt_3: str=None, opt_4: str=None, opt_5: str=None,
      opt_6: str=None, opt_7: str=None, opt_8: str=None, opt_9: str=None, opt_10: str=None): 
     # 選択肢をリストに格納
-    options = [opt_1, opt_2, opt_3, opt_4, opt_5, opt_6, opt_7, opt_8, opt_9, opt_10]
+    opts = [opt_1, opt_2, opt_3, opt_4, opt_5, opt_6, opt_7, opt_8, opt_9, opt_10]
+    options = [opt for opt in opts if opt and opt.strip()]
     # リアクションリスト
-    reactions = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+    reacts = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+    reactions = reacts[:len(options)]
+    # 選択肢の1文字目が絵文字ならリアクションリストを置き換え
+    reactions = reaction_replace(options, reactions)
     # 選択肢表示を初期化
     description = ""
 
-    for i, opt in enumerate(options):
-        if opt:
-            first_char = opt[0]
-            if first_char in emoji.EMOJI_DATA:
-                # 選択肢の最初の文字が絵文字の場合、その絵文字をリアクションに差替
-                reactions[i] = first_char
-                # 選択肢から最初の文字を削除
-                o = opt[1:]
-                options[i] = o
-
     # Embedで出力
-    for i, opt in enumerate(options):
-        if opt:
-            description += f"{reactions[i]} {opt}\n"
-    embed = discord.Embed(title=question, description=description, color=discord.Color.green())
+    embed = make_embed_text(options, reactions, question, description)
     await interaction.response.send_message(embed=embed)
     
     # リアクションを追加
     message = await interaction.original_response()
-    for i, opt in enumerate(options):
-        if opt:
-            await message.add_reaction(reactions[i])
+    for i in range(len(options)):
+        await message.add_reaction(reactions[i])
     
     # 辞書に保存
     add_vote(message.id, question, reactions, options)
+
+#=====/vote_addコマンド=====
+@bot.tree.command(name="vote_add_option", description="投票に選択肢を追加するよ")
+async def vote_add_option(interaction: discord.Interaction):
+    if votes:
+        view = VoteSelect(mode=VoteSelectMode.ADD_OPTION, voter=None, agent_id=None)
+        await interaction.response.send_message("選択肢を追加する投票を選んでね", view=view)
+    # 投票がない場合のメッセージ
+    else:
+        await interaction.response.send_message("投票がないみたい🥺")
 
 #=====/vote_result コマンド=====
 @bot.tree.command(name="vote_result", description="投票結果を表示するよ")
@@ -983,10 +1073,10 @@ async def vote(interaction: discord.Interaction,
 async def vote_result(interaction: discord.Interaction, mode: str):
     if votes:
         if mode == "mid":
-            view = VoteSelect(votes=votes, mode=VoteSelectMode.MID_RESULT, voter=None, agent_id=None)
+            view = VoteSelect(mode=VoteSelectMode.MID_RESULT, voter=None, agent_id=None)
             await interaction.response.send_message("どの投票結果を表示するか選んでね", view=view)
         elif mode == "final":
-            view = VoteSelect(votes=votes, mode=VoteSelectMode.FINAL_RESULT, voter=None, agent_id=None)
+            view = VoteSelect(mode=VoteSelectMode.FINAL_RESULT, voter=None, agent_id=None)
             await interaction.response.send_message("どの投票結果を表示するか選んでね", view=view)
         else:
             await interaction.response.send_message("選択モードの指定がおかしいみたい🥺")
@@ -1001,7 +1091,7 @@ async def vote_result(interaction: discord.Interaction, mode: str):
 async def proxy_vote(interaction: discord.Interaction, voter: str):
     if votes:
         agent_id = interaction.user.id
-        view = VoteSelect(votes=votes, mode=VoteSelectMode.PROXY_VOTE, voter=voter, agent_id=agent_id)
+        view = VoteSelect(mode=VoteSelectMode.PROXY_VOTE, voter=voter, agent_id=agent_id)
         await interaction.response.send_message("どの投票に代理投票するか選んでね", view=view)
     else:
         await interaction.response.send_message("代理投票できる投票がないみたい🥺")
@@ -1012,7 +1102,7 @@ async def proxy_vote(interaction: discord.Interaction, voter: str):
 async def cancel_proxy(interaction: discord.Interaction, voter: str):
     if votes:
         agent_id = interaction.user.id
-        view = VoteSelect(votes=votes, mode=VoteSelectMode.CANCEL_PROXY_VOTE, voter=voter, agent_id=agent_id)
+        view = VoteSelect(mode=VoteSelectMode.CANCEL_PROXY_VOTE, voter=voter, agent_id=agent_id)
         await interaction.response.send_message("代理投票を取り消しする投票を選んでね", view=view)
     else:
         await interaction.response.send_message("取り消しできる投票がないみたい🥺")
