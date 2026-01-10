@@ -327,8 +327,11 @@ def make_embed_text(options, reactions, question, description):
 async def make_vote_result(interaction, msg_id):
     print("[start: make_vote_result]")
     # 投票辞書を読み込み
-    options = votes[msg_id]["options"]
-    print(f"votes: {votes}")
+    if msg_id in votes:
+        options = votes[msg_id]["options"]
+        print(f"votes: {votes}")
+    else:
+        options = []
     # メッセージを読み込み
     message = await interaction.channel.fetch_message(msg_id)
     # サーバー情報を読み込み
@@ -338,8 +341,6 @@ async def make_vote_result(interaction, msg_id):
     result = {}
     # 結果用辞書に結果を記録
     for i, reaction in enumerate(message.reactions):
-        #users = []
-        #display_names = []
         
         # リアクション投票分
         # リアクションしたユーザーがbotでなければリストに追加
@@ -371,13 +372,22 @@ async def make_vote_result(interaction, msg_id):
                         users.append(f"{voter}(by{agent_display_name})")
                         display_names.append(f"{voter}(by{agent_display_name})")
 
-        result[i] = {
-            "emoji": reaction.emoji,
-            "option": options[i],
-            "count": len(users),
-            "users": users,
-            "display_names": display_names
-        }
+        if options:
+            result[i] = {
+                "emoji": reaction.emoji,
+                "option": options[i],
+                "count": len(users),
+                "users": users,
+                "display_names": display_names
+            }
+        else:
+            result[i] = {
+                "emoji": reaction.emoji,
+                "option": f"選択肢[{i+1}]",
+                "count": len(users),
+                "users": users,
+                "display_names": display_names
+            }
     dt = datetime.now(JST)
     return dt, result
 
@@ -385,11 +395,19 @@ async def make_vote_result(interaction, msg_id):
 async def show_vote_result(interaction, dt, result, msg_id, mode):
     print("[start: show_vote_result]")
     # Embedの設定
-    embed = discord.Embed(
-        title="投票結果",
-        description=votes[msg_id]["question"],
-        color=discord.Color.green()
-    )
+    if msg_id in votes:
+        embed = discord.Embed(
+            title="集計結果",
+            description=votes[msg_id]["question"],
+            color=discord.Color.green()
+        )
+    else:
+        embed = discord.Embed(
+            title="集計結果",
+            description="",
+            color=discord.Color.green()
+        )
+
     # 投票結果からフィールドを作成
     for i in result:
         emoji = result[i]["emoji"]
@@ -399,18 +417,28 @@ async def show_vote_result(interaction, dt, result, msg_id, mode):
         user_list = ", ".join(users) if users else "なし"
         embed.add_field(name=f"{emoji} {option} - {count}人", value=f"メンバー: {user_list}", inline=False)
     # フッター
-    if mode == "mid":
-        mode_str = "中間集計"
+    if msg_id in votes:
+        if mode == "mid":
+            mode_str = "中間集計"
+        else:
+            mode_str = "最終結果"
     else:
-        mode_str = "最終結果"
+        mode_str = "集計日時"
     embed.set_footer(text=f"{mode_str} - {dt.strftime('%Y/%m/%d %H:%M')}")
     # embedを表示
-    await interaction.message.edit(
-        content=None,
-        embed=embed,
-        allowed_mentions=discord.AllowedMentions.none(),
-        view=None
-    )
+    if interaction.message:
+        await interaction.message.edit(
+            content=None,
+            embed=embed,
+            allowed_mentions=discord.AllowedMentions.none(),
+            view=None
+        )
+    else:
+        await interaction.followup.send(
+            content=None,
+            embed=embed,
+            allowed_mentions=discord.AllowedMentions.none()
+        )
 
 #=====投票結果rows作成処理(選択肢グループ)=====
 def make_grouped_rows(result):
@@ -462,11 +490,14 @@ def make_listed_rows(result):
 #=====投票結果CSV出力処理=====
 async def export_vote_csv(interaction, result, msg_id, dt, mode):
     print("[start: export_vote_csv]")
-    meta = {
-        "question": votes[msg_id]["question"],
-        "status": mode,
-        "collected_at": dt.strftime("%Y/%m/%d %H:%M")
-    }
+    if msg_id in votes:
+        meta = {
+            "question": votes[msg_id]["question"],
+            "status": mode,
+            "collected_at": dt.strftime("%Y/%m/%d %H:%M")
+        }
+    else:
+        meta = {"collected_at": dt.strftime("%Y/%m/%d %H:%M")}
     
     # csv(グループ型)の作成
     header, rows = make_grouped_rows(result)
@@ -717,7 +748,7 @@ class ReminderSelect(View):
     
     # 削除処理の関数定義
     async def select_callback(self, interaction: discord.Interaction):
-        await interaction.response.edit_message(view=None)
+        await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
         value = interaction.data["values"][0]
         # 日時とインデックスを分離
         dt_str, idx_str = value.split("|")
@@ -782,30 +813,37 @@ class VoteSelect(View):
     # 投票選択後処理の関数定義
     async def select_callback(self, interaction: discord.Interaction):
         msg_id = int(interaction.data["values"][0])
-        await interaction.response.edit_message(view=None)
 
-        # 代理投票と集計で処理を分岐
         # 代理投票
         if self.mode == VoteSelectMode.PROXY_VOTE:
+            await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
             view = VoteOptionSelect(msg_id, self.voter, self.agent_id)
-            await interaction.followup.send("代理投票する選択肢を選んでね", view=view)
+            await interaction.message.edit(content="代理投票する選択肢を選んでね", view=view)
         # 代理投票キャンセル
         elif self.mode == VoteSelectMode.CANCEL_PROXY_VOTE:
             removed = cancel_proxy_vote(msg_id, self.voter, self.agent_id)
+            await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
             if removed:
-                await interaction.followup.send(f"**{self.voter}** の分の代理投票を取り消したよ🫡")
+                await interaction.message.edit(content=f"**{self.voter}** の分の代理投票を取り消したよ🫡")
             else:
-                await interaction.followup.send(f"⚠️取り消せる代理投票がないよ")
+                await interaction.message.edit(content=f"⚠️取り消せる代理投票がないよ", ephemeral=True)
         # 投票選択肢追加
         elif self.mode == VoteSelectMode.ADD_OPTION:
-            await interaction.followup.send_modal(AddOptionInput(msg_id))
+            lim = min(5, 10 - len(votes[msg_id]["options"]))
+            if lim == 0:
+                await interaction.message.edit(content="️⚠️これ以上選択肢を増やせないよ", view=None, ephemeral=True)
+                return
+            await interaction.response.send_modal(AddOptionInput(msg_id, lim))
         # 削除
         elif self.mode == VoteSelectMode.DELETE_VOTE:
+            await interaction.response.defer()
             remove_vote(msg_id)
             remove_proxy_vote(msg_id)
-            await interaction.followup.send("投票を削除したよ🫡")
+            await interaction.message.delete()
+            await interaction.followup.send(content="投票を削除したよ🫡", ephemeral=True)
         # 集計
         else:
+            await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
             dt, result = await make_vote_result(interaction, msg_id)
 
             # 結果表示処理
@@ -862,7 +900,7 @@ class VoteOptionSelect(View):
 
     # 選択肢選択後の関数定義
     async def select_callback(self, interaction: discord.Interaction):
-        await interaction.response.edit_message(view=None)
+        await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
         guild = interaction.guild
         
         opt_idx = [int(opt_str) for opt_str in interaction.data["values"]]
@@ -870,19 +908,21 @@ class VoteOptionSelect(View):
         add_proxy_votes(self.msg_id, self.voter, self.agent_id, opt_idx)
         agent = guild.get_member(self.agent_id)
         agent_display_name = agent.display_name
-        await interaction.followup.send(f"**{agent_display_name}** から **{self.voter}** の分の投票を受け付けたよ🫡")
+        await interaction.message.edit(content=f"**{agent_display_name}** から **{self.voter}** の分の投票を受け付けたよ🫡")
 
 #=====追加選択肢入力=====
 class AddOptionInput(discord.ui.Modal):
     # クラスの初期設定
-    def __init__(self, msg_id):
+    def __init__(self, msg_id, lim):
         super().__init__(title="追加する選択肢を入力してね")
         # msg_idプロパティにメッセージIDをセット
         self.msg_id = msg_id
- 
+        # limプロパティに選択肢追加上限をセット
+        self.lim = lim
+        
         # ModalUIの定義
         self.inputs = []
-        for i in range(5):
+        for i in range(self.lim):
             text = discord.ui.TextInput(
                 label=f"選択肢{i+1}",
                 required=(i == 0)
@@ -893,6 +933,8 @@ class AddOptionInput(discord.ui.Modal):
     # 選択肢入力後の処理
     async def on_submit(self, interaction: discord.Interaction):
         print("[start: on submit]")
+        await interaction.response.defer()
+        await interaction.message.edit(content=f"{bot.user.display_name}が考え中…🤔", view=None)
         # 追加選択肢をリスト化
         add_options = [add_opt.value for add_opt in self.inputs if add_opt.value.strip()]
         # 辞書の内容を取得
@@ -914,11 +956,12 @@ class AddOptionInput(discord.ui.Modal):
 
         # embedを表示
         message = await interaction.channel.fetch_message(self.msg_id)
-        await message.edit(embed = embed)
+        await message.edit(embed=embed)
         # リアクションを追加
         for i in range(len(add_options)):
             await message.add_reaction(add_reactions[i])
-        await interaction.response.send_message(f"投票に選択肢を追加したよ🫡\n{message.jump_url}")
+        
+        await interaction.message.edit(content=f"投票に選択肢を追加したよ🫡\n{message.jump_url}")
 
         # 辞書の更新
         add_vote(self.msg_id, question, reactions, options)
@@ -986,7 +1029,7 @@ async def remind(
     
     # 過去時刻チェック
     if dt < datetime.now(JST):
-        await interaction.response.send_message("️⚠️設定時刻が過去の日時だよ")
+        await interaction.response.send_message("️⚠️設定時刻が過去の日時だよ", ephemeral=True)
         return
     
     # add_reminder関数に渡す
@@ -1021,7 +1064,7 @@ async def reminder_list(interaction: discord.Interaction):
         await interaction.response.send_message(embed=embed)
     # リマインダーが設定されていない場合のメッセージ
     else:
-        await interaction.response.send_message("⚠️設定されているリマインダーがないよ")
+        await interaction.response.send_message("⚠️設定されているリマインダーがないよ", ephemeral=True)
 
 #=====/reminder_delete コマンド=====
 @bot.tree.command(name="reminder_delete", description="リマインダーを削除するよ")
@@ -1032,7 +1075,7 @@ async def reminder_delete(interaction: discord.Interaction):
         await interaction.response.send_message("削除するリマインダーを選んでね", view=view)
     # リマインダーが設定されていない場合のメッセージ
     else:
-        await interaction.response.send_message("⚠️設定されているリマインダーがないよ")
+        await interaction.response.send_message("⚠️設定されているリマインダーがないよ", ephemeral=True)
 
 #---------------
 # 投票関係
@@ -1086,7 +1129,7 @@ async def vote_add_option(interaction: discord.Interaction):
         await interaction.response.send_message("選択肢を追加する投票を選んでね", view=view)
     # 投票がない場合のメッセージ
     else:
-        await interaction.response.send_message("⚠️実施中の投票がないよ🥺")
+        await interaction.response.send_message("⚠️実施中の投票がないよ", ephemeral=True)
 
 #=====/vote_result コマンド=====
 @bot.tree.command(name="vote_result", description="投票結果を表示するよ")
@@ -1104,11 +1147,11 @@ async def vote_result(interaction: discord.Interaction, mode: str):
             view = VoteSelect(mode=VoteSelectMode.FINAL_RESULT, voter=None, agent_id=None)
             await interaction.response.send_message("どの投票結果を表示するか選んでね", view=view)
         else:
-            await interaction.response.send_message("⚠️選択モードの指定がまちがってるよ")
+            await interaction.response.send_message("⚠️選択モードの指定がまちがってるよ", ephemeral=True)
 
     # 投票がない場合のメッセージ
     else:
-        await interaction.response.send_message("⚠️集計できる投票がないよ")
+        await interaction.response.send_message("⚠️集計できる投票がないよ", ephemeral=True)
 
 #=====/proxy_vote コマンド=====
 @bot.tree.command(name="proxy_vote", description="本人の代わりに代理投票するよ")
@@ -1119,7 +1162,7 @@ async def proxy_vote(interaction: discord.Interaction, voter: str):
         view = VoteSelect(mode=VoteSelectMode.PROXY_VOTE, voter=voter, agent_id=agent_id)
         await interaction.response.send_message("どの投票に代理投票するか選んでね", view=view)
     else:
-        await interaction.response.send_message("⚠️代理投票できる投票がないよ")
+        await interaction.response.send_message("⚠️代理投票できる投票がないよ", ephemeral=True)
 
 #=====/cancel_proxy コマンド=====
 @bot.tree.command(name="cancel_proxy", description="投票済みの代理投票を取り消すよ")
@@ -1130,13 +1173,30 @@ async def cancel_proxy(interaction: discord.Interaction, voter: str):
         view = VoteSelect(mode=VoteSelectMode.CANCEL_PROXY_VOTE, voter=voter, agent_id=agent_id)
         await interaction.response.send_message("代理投票を取り消しする投票を選んでね", view=view)
     else:
-        await interaction.response.send_message("⚠️取り消しできる投票がないよ")
+        await interaction.response.send_message("⚠️取り消しできる投票がないよ", ephemeral=True)
 
 #=====!delete_vote コマンド====
 @bot.command()
 async def delete_vote(ctx):
-    view = VoteSelect(mode=VoteSelectMode.DELETE_VOTE, voter=None, agent_id=None)
-    await ctx.send("どの投票を削除するか選んでね", view=view)
+    if votes:
+        view = VoteSelect(mode=VoteSelectMode.DELETE_VOTE, voter=None, agent_id=None)
+        await ctx.send("どの投票を削除するか選んでね", view=view)
+    else:
+        await ctx.send("⚠️取り消しできる投票がないよ", ephemeral=True)
+
+#=====context_reaction_count コマンド=====
+@bot.tree.context_menu(name="context_reaction_count")
+async def context_reaction_count(interaction: discord.Interaction, message: discord.Message):
+    await interaction.response.defer()
+    print(message)
+    msg_id = message.id
+    
+    dt, result = await make_vote_result(interaction, msg_id)
+    # 結果表示処理
+    await show_vote_result(interaction, dt, result, msg_id, "mid")
+    # CSV作成処理
+    await export_vote_csv(interaction, result, msg_id, dt, "mid")
+    
 
 #---------------
 # メンバーリスト関係
@@ -1213,7 +1273,7 @@ async def context_ocr(interaction: discord.Interaction, message: discord.Message
     await interaction.response.defer()
     
     if not message.attachments:
-        await interaction.response.send("⚠️画像が添付されてないよ")
+        await interaction.response.send("⚠️画像が添付されてないよ", ephemeral=True)
         return
 
     # 画像ごとにOCR処理を実行してtemp_rowsに格納
