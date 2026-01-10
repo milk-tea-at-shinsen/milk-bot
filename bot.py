@@ -1397,7 +1397,7 @@ async def add_listed_ch(ctx):
     add_make_list_channel(channel_id)
     
     await ctx.message.delete()
-    await ctx.send(f"{channel_name}をリスト化対象にしたよ🫡\n今後は改行ごとに別の項目としてリスト化されるよ\n---")
+    await ctx.send(f"{channel_name}をリスト化対象にしたよ🫡\n今後は改行ごとに別の項目としてリスト化されるよ\nリストから削除する場合は、ロングタップ(PCの場合は右クリック)して、アプリ→**remove_from_list**で削除できるよ\n---")
 
 @bot.command()
 async def remove_listed_ch(ctx):
