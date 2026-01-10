@@ -14,8 +14,8 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"起動しました！: {bot.user}")
-    print(f"ループ開始： {datetime.datetime.now()}")
+    print(f"Botを起動: {bot.user}")
+    print(f"ループ開始: {datetime.datetime.now()}")
     bot.loop.create_task(reminder_loop())
 
 # 空の辞書を定義
@@ -50,8 +50,7 @@ async def remind(interaction: discord.Interaction, date: str, time: str, msg: st
     add_reminder(dt, repeat, interval, channel_id, msg)
 
     await interaction.response.send_message(f"{dt} にリマインダーをセットしました:saluting_face:")
-    print(dt)
-    print(reminders[dt])
+    print(f"予定を追加: {reminders[dt]}")
 
 # 通知用ループ
 async def reminder_loop():
@@ -74,9 +73,9 @@ async def reminder_loop():
                 channel = bot.get_channel(channel_id)
                 if channel:
                     await channel.send(f"{msg}")
-                    print (f"チャンネルにメッセージを送信：{datetime.datetime.now()}")
+                    print (f"チャンネルにメッセージを送信: {datetime.datetime.now()}")
                 else:
-                    print(f"チャンネル取得失敗：{channel_id}")
+                    print(f"チャンネル取得失敗: {channel_id}")
             
                 # 繰り返し予定の登録
                 if repeat:
@@ -90,6 +89,20 @@ async def reminder_loop():
             
             # 処理済の予定の削除
             del reminders[next_minute]
+            print(f"{next_minute}の予定を削除")
+
+# 予定の削除
+@bot.tree.command(name="remind_delete", description="リマインダーを削除します")
+@app_commands.describe(
+    date="日付(yyyy/mm/dd)",
+    time="時刻(hh:mm)",
+    msg="登録済みの予定"
+)
+async def remind_delete(interaction: discord.Interaction, date: str, time: str, msg: str = None):
+    dt = datetime.datetime.strptime(f"{date} {time}", "%Y/%m/%d %H:%M")
+    del reminders[dt]
+    await interaction.response.send_message(f"{dt}のリマインダーを削除しました:saluting_face:")
+    print(f"{dt}の予定を削除")
 
 # スラッシュコマンドのテスト
 @bot.tree.command(name="ping", description="ピンポン！")
