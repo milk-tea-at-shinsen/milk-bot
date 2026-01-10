@@ -1,8 +1,13 @@
+#====================
+# ライブラリのインポート
+#====================
 import discord
 from discord import app_commands
 from discord.ext import commands
+from discord.ui import View, Select
 import asyncio
 import datetime
+from datetime import datetime
 import os
 import json
 
@@ -11,6 +16,9 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+#==============================
+# 定数・グローバル変数・辞書の準備
+#==============================
 # リマインダー辞書の読込
 def load_reminders():
     # reminders.jsonが存在すれば
@@ -19,8 +27,8 @@ def load_reminders():
         with open("/mnt/reminders/reminders.json", "r", encoding = "utf-8") as file:
             load_data = json.load(file) 
             #load_reminder関数の戻り値を設定
-            return {datetime.datetime.fromisoformat(key): value for key, value in load_data.items()}
-        print(f"辞書ファイルを読込完了: {datetime.datetime.now()}")
+            return {datetime.fromisoformat(key): value for key, value in load_data.items()}
+        print(f"辞書ファイルを読込完了: {datetime.now()}")
     else:
         #jsonが存在しない場合は、戻り値を空の辞書にする
         return {}
@@ -30,16 +38,9 @@ rmd_dt = {}
 #jsonファイルの内容または空の辞書
 reminders = load_reminders() 
 
-# Bot起動確認
-@bot.event
-async def on_ready():
-    await bot.tree.sync()
-    print(f"Botを起動: {bot.user}")
-    
-    # リマインダーループの開始
-    print(f"ループ開始: {datetime.datetime.now()}")
-    bot.loop.create_task(reminder_loop())
-
+#===============
+# 共通処理関数
+#===============
 # 辞書をjsonファイルに保存
 def export_reminders():
     #remindersに値を代入するためグローバル宣言
@@ -48,7 +49,7 @@ def export_reminders():
     with open("/mnt/reminders/reminders.json", "w", encoding = "utf-8") as file:
         # datetime形式をstr形式に変換してから保存
         json.dump({dt.isoformat(): value for dt, value in reminders.items()}, file, ensure_ascii=False, indent=2) 
-    print(f"辞書ファイルを保存完了: {datetime.datetime.now()}")
+    print(f"辞書ファイルを保存完了: {datetime.now()}")
 
 # 辞書登録処理
 def add_reminder(dt, repeat, interval, channel_id, msg):
@@ -59,36 +60,21 @@ def add_reminder(dt, repeat, interval, channel_id, msg):
     reminders[dt].append({"repeat": repeat, "interval": interval, "channel_id": channel_id, "msg": msg})
     export_reminders()
 
-# /remind コマンド
-@bot.tree.command(name="remind", description="リマインダーをセットします")
-@app_commands.describe(
-    date="日付(yyyy/mm/dd)",
-    time="時刻(hh:mm)",
-    repeat="繰り返し単位",
-    interval="繰り返し間隔",
-    msg="リマインド内容"
-)
-@app_commands.choices(repeat=[
-    app_commands.Choice(name="日", value="day"),
-    app_commands.Choice(name="時間", value="hour"),
-    app_commands.Choice(name="分", value="minute")
-])
-async def remind(interaction: discord.Interaction, date: str, time: str, msg: str, repeat: str = None, interval: int = 0):
-    # 文字列引数からdatatime型に変換
-    dt = datetime.datetime.strptime(f"{date} {time}", "%Y/%m/%d %H:%M")
-    channel_id = interaction.channel.id
-    # add_reminder関数に渡す
-    add_reminder(dt, repeat, interval, channel_id, msg)
-
-    await interaction.response.send_message(f"{dt.strftime("%Y/%m/%d %H:%M")} にリマインダーをセットしました:saluting_face:")
-    print(f"予定を追加: {reminders[dt]}")
+# リマインダーの削除
+def remove_reminder(dt, idx):
+    removed = reminders[dt].pop(idx-1)
+    # 値が空の辞書の行を削除
+    if not reminders[dt]:
+        del reminders[dt]
+    export_reminders()
+    return removed
 
 # 通知用ループ
 async def reminder_loop():
     await bot.wait_until_ready()
     while not bot.is_closed():
         # 現在時刻を取得して次のゼロ秒までsleep
-        now = datetime.datetime.now()
+        now = datetime.now()
         next_minute = (now + datetime.timedelta(minutes=1)).replace(second=0, microsecond=0)
         wait = (next_minute - now).total_seconds()
         await asyncio.sleep(wait)
@@ -104,7 +90,7 @@ async def reminder_loop():
                 channel = bot.get_channel(channel_id)
                 if channel:
                     await channel.send(f"{msg}")
-                    print (f"チャンネルにメッセージを送信: {datetime.datetime.now()}")
+                    print (f"チャンネルにメッセージを送信: {datetime.now()}")
                 else:
                     print(f"チャンネル取得失敗: {channel_id}")
             
@@ -123,57 +109,118 @@ async def reminder_loop():
             export_reminders()
             print(f"{next_minute}の予定を削除")
 
-# 予定の削除
-@bot.tree.command(name="remind_delete", description="リマインダーを削除します")
+#===============
+# クラス定義
+#===============
+class ReminderSelect(View):
+    # クラスの初期設定
+    def __init__(self, reminders_dict):
+        super().__init__()
+        # remindersプロパティにreminders_dictをセット
+        self.reminders = reminders_dict
+        
+        #削除選択リストの定義
+        options = []
+        for dt, values in reminders_dict.items():
+            for index, v in enumerate(values, start=1):
+                msg = v["msg"]
+                label = f"{dt.strftime('%Y/%m/%d %H:%M')} - {msg[:50]}"
+                value = f"{dt.isoformat()}|{index}"
+                options.append(discord.SelectOption(label=label, value=value))
+        
+        #selectUIの定義
+        if options:
+            select = Select(
+                placeholder="削除するリマインダーを選択",
+                options = options
+            )
+            select.callback = self.select_callback
+            self.add_item(select)
+    
+    # 削除処理の関数定義
+    async def select_callback(self, interaction: discord.Interaction):
+        value = interaction.data["values"][0]
+        dt_str, idx_str = value.split("|")
+        dt = datetime.fromisoformat(dt_str)
+        idx = int(idx_str)
+        
+        # 予定の削除
+        removed = remove_reminder(dt, idx)
+        
+        # 削除完了メッセージの送信
+        await interaction.message.edit(
+            content=f"リマインダーを削除: {dt.strftime('%Y/%m/%d %H:%M')} - {removed['msg']}",
+            view=None
+        )
+        print(f"リマインダーを削除: {dt.strftime('%Y/%m/%d %H:%M')} - {removed['msg']}")
+
+#===============
+# イベントハンドラ
+#===============
+# Bot起動確認
+@bot.event
+async def on_ready():
+    await bot.tree.sync()
+    print(f"Botを起動: {bot.user}")
+    
+    # リマインダーループの開始
+    print(f"ループ開始: {datetime.now()}")
+    bot.loop.create_task(reminder_loop())
+
+#===============
+# コマンド定義
+#===============
+# /remind コマンド
+@bot.tree.command(name="remind", description="リマインダーをセットします")
 @app_commands.describe(
     date="日付(yyyy/mm/dd)",
     time="時刻(hh:mm)",
-    msg="登録済みの予定"
+    repeat="繰り返し単位",
+    interval="繰り返し間隔",
+    msg="リマインド内容"
 )
-async def remind_delete(interaction: discord.Interaction, date: str, time: str, msg: str = None):
-    dt = datetime.datetime.strptime(f"{date} {time}", "%Y/%m/%d %H:%M")
-    del reminders[dt]
-    export_reminders()
-    await interaction.response.send_message(f"{dt.strftime("%Y/%m/%d %H:%M")}のリマインダーを削除しました:saluting_face:")
-    print(f"{dt}の予定を削除")
+@app_commands.choices(repeat=[
+    app_commands.Choice(name="日", value="day"),
+    app_commands.Choice(name="時間", value="hour"),
+    app_commands.Choice(name="分", value="minute")
+])
+async def remind(interaction: discord.Interaction, date: str, time: str, msg: str, repeat: str = None, interval: int = 0):
+    # 文字列引数からdatatime型に変換
+    dt = datetime.strptime(f"{date} {time}", "%Y/%m/%d %H:%M")
+    channel_id = interaction.channel.id
+    # add_reminder関数に渡す
+    add_reminder(dt, repeat, interval, channel_id, msg)
+
+    await interaction.response.send_message(f"{dt.strftime("%Y/%m/%d %H:%M")} にリマインダーをセットしました:saluting_face:")
+    print(f"予定を追加: {reminders[dt]}")
 
 # リマインダー一覧の表示
 @bot.tree.command(name="reminder_list", description="リマインダーの一覧を表示します")
 async def reminder_list(interaction: discord.Interaction):
     # 空のリストを作成
-    list = []
+    items = []
     # remindersの中身を取り出してリストに格納
     for dt, value in reminders.items():
-        dt = dt.strftime("%Y/%m/%d %H:%M")
+        dt_str = dt.strftime("%Y/%m/%d %H:%M")
         for rmd_dt in value:
-            list.append(f"**{dt}** - {rmd_dt['msg']}")
-            msg = "\n".join(list)
-    await interaction.response.send_message(f"**リマインダー一覧**\n{msg}")
-
-# スラッシュコマンドのテスト
-@bot.tree.command(name="ping", description="ピンポン！")
-async def ping(interaction: discord.Interaction):
-    await interaction.response.send_message("pong!")
-
-# スラッシュコマンドとプレフィックスコマンドのテスト
-async def greet_common(ctx_or_interaction, target: str):
-    msg = f"{target}さん、こんちわ!"
-    if isinstance(ctx_or_interaction, discord.Interaction):
-        await ctx_or_interaction.response.send_message(msg)
+            items.append((dt_str, rmd_dt["msg"]))
+            
+    if items:
+        embed = discord.Embed(title="リマインダー一覧", color=discord.Color.blue())
+        for dt_txt, msg in items:
+            embed.add_field(name=dt_txt, value=msg, inline=False)
+        await interaction.response.send_message(embed=embed)
     else:
-        await ctx_or_interaction.send(msg)
+        await interaction.response.send_message("リマインダーは設定されていません")
 
-@bot.command(name="hello")
-async def hello_prefix(ctx):
-    target = ctx.author.display_name
-    await greet_common(ctx, target)
-    print(f"プレフィックスコマンドを実行: {datetime.datetime.now()}")
-
-@bot.tree.command(name="hello", description="スラッシュ版のHello")
-async def hello_slash(interaction: discord.Interaction):
-    target = interaction.user.display_name
-    await greet_common(interaction, target)
-    print(f"スラッシュコマンドを実行: {datetime.datetime.now()}")
+# 削除メニューの呼び出しコマンド
+@bot.tree.command(name="reminder_delete", description="リマインダー一覧を表示します")
+async def reminder_delete(interaction: discord.Interaction):
+    if reminders:
+        view = ReminderSelect(reminders)
+        await interaction.response.send_message("削除するリマインダーを選択", view=view)
+    else:
+        await interaction.response.send_message("リマインダーは設定されていません")
 
 # Botを起動
 bot.run(os.getenv("DISCORD_TOKEN"))
