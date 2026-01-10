@@ -12,12 +12,20 @@ import json
 import emoji
 from enum import Enum
 import csv, io
+from google.cloud import vision
+from google.oauth2 import service_account
+import aiohttp
 
 # Botの準備
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
+
+# サービスアカウントキーの読込
+info = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
+credentials = service_account.Credentials.from_service_account_info(info)
+client = vision.ImageAnnotatorClient(credentials=credentials)
 
 #===================================
 # 定数・グローバル変数・辞書の準備
@@ -38,7 +46,7 @@ def load_data(data):
         #jsonが存在しない場合は、戻り値を空の辞書にする
         return {}
 
-#=====各辞書定義=====
+#=====各辞書読込前処理=====
 #---リマインダー辞書---
 data_raw = load_data("reminders")
 if data_raw:
@@ -196,6 +204,7 @@ def remove_proxy_vote(msg_id):
 def cancel_proxy_vote(msg_id, voter, agent_id):
     print("[start: cancel_proxy_vote]")
     if msg_id in proxy_votes:
+        # 該当する投票を取り出して投票者と代理人が一致するものを削除
         for key, value in proxy_votes[msg_id].items():
             if (key, value["agent_id"]) == (voter, agent_id):
                 removed = proxy_votes[msg_id][voter]
@@ -232,25 +241,29 @@ async def make_vote_result(interaction, msg_id):
     result = {}
     # 結果用辞書に結果を記録
     for i, reaction in enumerate(message.reactions):
-        users = []
-        display_names = []
+        #users = []
+        #display_names = []
         
         # リアクション投票分
-        async for user in reaction.users():
-            if user != bot.user:
-                users.append(user.mention)
-                display_names.append(user.display_name)
+        # リアクションしたユーザーがbotでなければリストに追加
+        reaction_users = [reaction_user async for reaction_user in reaction.users() if reaction_user != bot.user]
+        users = [user.mention for user in reaction_users]
+        display_names = [user.display_name for user in reaction_users]
         
         # 代理投票分
         if msg_id in proxy_votes:
+            # 投票者の投票内容を確認し該当する選択肢のものがあればリストに追加
             for voter, values in proxy_votes[msg_id].items():
                 for opt_idx in values["opt_idx"]:
                     if opt_idx == i:
                         agent_id = values["agent_id"]
+                        # 代理人のidから代理人を検索
                         agent = guild.get_member(agent_id)
+                        # 代理人が最近のキャッシュに見つからなければサーバー情報から検索
                         if agent is None:
                             try:
                                 agent = await guild.fetch_member(agent_id)
+                            # それでも見つからない場合はNoneを表示
                             except:
                                 agent = None
                         if agent:
@@ -328,14 +341,9 @@ def make_grouped_rows(result):
     # ユーザーリストの行列を入れ替え
     for i in range(max_users):
         # rowをリセット
-        row = []
-        # 各ユーザーリストの同番のユーザーをrowに並べる
-        for j in range(len(header)):
-            if i < len(users[j]):
-                row.append(users[j][i])
-            # ユーザーリストを使い切っている場合は空欄を連結
-            else:
-                row.append("")
+        #row = []
+        # 各ユーザーリストの同番のユーザーをrowに並べる, 存在しない場合は空文字を追加
+        row = [users[j][i] if i < len(users[j]) else "" for j in range(len(header))]
         # rowをまとめてrowsを作る
         rows.append(row)
     
@@ -345,24 +353,27 @@ def make_grouped_rows(result):
 def make_listed_rows(result):
     print("[start: make_listed_rows]")
     header = ["option", "users"]
-    rows = []
     
-    for i, value in result.items():
-        for user in value["display_names"]:
-            rows.append([value["option"], user])
+    rows = [
+        [value["option"], user]
+         for key, value in result.items()
+         for user in value["display_names"]
+    ]
     
     return header, rows
 
-#---投票結果CSV作成処理---
-def make_csv(filename, meta, header, rows):
+#---CSV作成処理---
+def make_csv(filename, rows, meta=None, header=None):
     print("[start: make_csv]")
     with open(filename, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         # metaの書込
-        for key, value in meta.items():
-            writer.writerow([f"#{key}: {value}"])
+        if meta:
+            for key, value in meta.items():
+                writer.writerow([f"#{key}: {value}"])
         # headerの書込
-        writer.writerow(header)
+        if header:
+            writer.writerow(header)
         # rowsの書込
         writer.writerows(rows)
 
@@ -378,18 +389,138 @@ async def export_vote_csv(interaction, result, msg_id, dt, mode):
     # csv(グループ型)の作成
     header, rows = make_grouped_rows(result)
     grouped_file = f"/tmp/{dt.strftime('%Y%m%d_%H%M')}_grouped.csv"
-    make_csv(grouped_file, meta, header, rows)
+    make_csv(grouped_file, rows, meta, header)
     
     # csv(リスト型)の作成
     header, rows = make_listed_rows(result)
     listed_file = f"/tmp/{dt.strftime('%Y%m%d_%H%M')}_listed.csv"
-    make_csv(listed_file, meta, header, rows)
+    make_csv(listed_file, rows, meta, header)
     
     # discordに送信
     await interaction.followup.send(
         content="投票集計結果のCSVだよ(\*`･ω･)ゞ",
         files=[discord.File(grouped_file), discord.File(listed_file)]
     )
+
+#=====OCR関係の処理=====
+#---行センター出し関数---
+def get_x_center(bounding_box):
+    return sum(vertice.x for vertice in bounding_box.vertices) / 4
+
+#---列センター出し関数---
+def get_y_center(bounding_box):
+    return sum(vertice.y for vertice in bounding_box.vertices) / 4
+
+#---高さ出し関数---
+def get_height(bounding_box):
+    return max(vertice.y for vertice in bounding_box.vertices) - min(vertice.y for vertice in bounding_box.vertices)
+
+#---symbol取得処理---
+def get_symbols(response):
+    print("[start: get_symbols]")
+    symbols = [{
+            "symbol": symbol.text,
+            "x": get_x_center(symbol.bounding_box),
+            "y": get_y_center(symbol.bounding_box),
+            "height": get_height(symbol.bounding_box)
+        }
+        for page in response.full_text_annotation.pages
+        for block in page.blocks
+        for paragraph in block.paragraphs
+        for word in paragraph.words
+        for symbol in word.symbols
+    ]
+    return symbols
+
+#---行作成処理---
+def cluster_lines(symbols, avr_height):
+    print("[start: cluster_lines]")
+    # symbolをy座標でソート
+    symbols.sort(key=lambda symbol: symbol["y"])
+    # y座標で同一行を判定
+    line = []
+    line_y = None
+    lines = []
+    for symbol in symbols:
+        # 最初の行のy座標を設定
+        if line_y is None:
+            line_y =symbol["y"]
+        # 行のy座標範囲内ならlineに追加
+        if abs(symbol["y"] - line_y) < avr_height * 1.5:
+            line.append(symbol)
+            line_y = (line_y + symbol["y"]) / 2
+        # 行のy座標範囲外ならlinesにlineを追加してlineをリセット
+        else:
+            line.sort(key=lambda symbol: symbol["x"])
+            lines.append(line)
+            line = [symbol]
+            line_y = symbol["y"]
+    # 最終行をlinesに追加
+    if line:
+        line.sort(key=lambda symbol: symbol["x"])
+        lines.append(line)
+    return lines
+
+#---列項目作成処理---
+def cluster_rows(lines, avr_height):
+    print("[start: cluster_rows]")
+    # x座標で単語を判定
+    word = []
+    row = []
+    rows = []
+    prev_x = None
+    for line in lines:
+        for symbol in line:
+            if prev_x is None:
+                prev_x = symbol["x"]
+            if (symbol["x"] - prev_x) < avr_height * 2:
+                word.append(symbol["symbol"])
+                prev_x = symbol["x"]
+            else:
+                row.append("".join(word))
+                word = [symbol["symbol"]]
+                prev_x = symbol["x"]
+        # 最終単語をrowに追加して、rowをrowsに追加
+        if word:
+            row.append("".join(word))
+            rows.append(row)
+            word = []
+            row = []
+            prev_x = None
+    return rows
+
+#---最頻列数を取得---
+def get_mode_columns(rows):
+    col_counts = [len(row) for row in rows]
+    return max(set(col_counts), key=col_counts.count)
+
+#---表本体抽出処理---
+def extract_table_body(rows):
+    print("[start: extract_table_body]")
+
+    mode_columns = get_mode_columns(rows)
+    table_body = [row for row in rows if len(row) + 1 >= mode_columns]
+    return table_body
+
+#---OCR->CSV用データ整形処理---
+def extract_table_from_image(image_content):
+    image = vision.Image(content=image_content)
+    response = client.document_text_detection(image=image)
+
+    # symbolsを取得
+    symbols = get_symbols(response)
+
+    # 文字が存在しなかった場合
+    if not symbols:
+        return []
+    else:
+        # 文字の高さの平均を計算
+        avr_height = sum(symbol["height"] for symbol in symbols) / len(symbols) 
+        
+        lines = cluster_lines(symbols, avr_height)
+        rows = cluster_rows(lines, avr_height)
+        rows = extract_table_body(rows)
+        return rows
 
 #=====通知用ループ処理=====
 async def reminder_loop():
@@ -595,9 +726,7 @@ class VoteOptionSelect(View):
         await interaction.response.defer()
         guild = interaction.guild
         
-        opt_idx = []
-        for opt_str in interaction.data["values"]:
-            opt_idx.append(int(opt_str))
+        opt_idx = [int(opt_str) for opt_str in interaction.data["values"]]
         
         add_proxy_votes(self.msg_id, self.voter, self.agent_id, opt_idx)
         agent = guild.get_member(self.agent_id)
@@ -805,16 +934,42 @@ async def export_members(interaction: discord.Interaction):
         "collected_at": datetime.now(JST).strftime("%Y/%m/%d %H:%M")
     }
     header = ["user_id", "display_name"]
-    rows = []
+    rows = [[member.id, member.display_name] async for member in guild.fetch_members(limit=None)]
     
-    async for member in guild.fetch_members(limit=None):
-        rows.append([member.id, member.display_name])
-    
-    make_csv(filename, meta, header, rows)
+    make_csv(filename, rows, meta, header)
     
     # discordに送信
     await interaction.followup.send(
         content="メンバー一覧のCSVだよ(\*`･ω･)ゞ",
+        file=discord.File(filename)
+    )
+    
+#=====/ocr コマンド=====
+@bot.tree.context_menu(name="OCR",)
+async def ocr(interaction: discord.Interaction, message: discord.Message):
+    await interaction.response.defer()
+    
+    if not message.attachments:
+        await interaction.response.send("画像が添付されてないよ(´･ω･`)")
+        return
+
+    attachment = message.attachments[0]
+    
+    async with aiohttp.ClientSession() as session:
+        async with session.get(attachment.url) as resp:
+            content = await resp.read()
+    
+    # visionからテキストを受け取ってCSV用に整形
+    rows = extract_table_from_image(content)
+    print(f"rows:{rows}")
+    
+    # csv作成処理
+    filename = f"/tmp/ocr_{datetime.now(JST).strftime('%Y%m%d_%H%M')}.csv"
+    make_csv(filename, rows)
+    
+    # CSVを出力
+    await interaction.followup.send(
+        content="OCR結果のCSVだよ(\*`･ω･)ゞ",
         file=discord.File(filename)
     )
     

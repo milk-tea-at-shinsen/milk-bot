@@ -1,1 +1,4 @@
 discord.py>=2.3.2
+emoji>=2.2.0
+google-cloud-vision
+aiohttp
