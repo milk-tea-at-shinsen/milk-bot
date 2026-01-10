@@ -766,6 +766,11 @@ class VoteSelect(View):
                     placeholder="選択肢を追加する投票を選んでね",
                     options = options
                 )
+            elif mode == VoteSelectMode.DELETE_VOTE:
+                select = Select(
+                    placeholder="削除する投票を選んでね",
+                    options = options
+                )
             else:
                 select = Select(
                     placeholder="集計する投票を選んでね",
@@ -794,8 +799,13 @@ class VoteSelect(View):
         # 投票選択肢追加
         elif self.mode == VoteSelectMode.ADD_OPTION:
             await interaction.followup.send_modal(AddOptionInput(msg_id))
+        # 削除
+        elif self.mode == VoteSelectMode.DELETE_VOTE:
+            remove_vote(msg_id)
+            remove_proxy_vote(msg_id)
+            await interaction.followup.send("投票を削除したよ🫡")
+        # 集計
         else:
-            # 集計
             dt, result = await make_vote_result(interaction, msg_id)
 
             # 結果表示処理
@@ -852,7 +862,7 @@ class VoteOptionSelect(View):
 
     # 選択肢選択後の関数定義
     async def select_callback(self, interaction: discord.Interaction):
-        await interaction.response.edit(view=None)
+        await interaction.response.edit_message(view=None)
         guild = interaction.guild
         
         opt_idx = [int(opt_str) for opt_str in interaction.data["values"]]
@@ -920,6 +930,7 @@ class VoteSelectMode(Enum):
     PROXY_VOTE = "proxy_vote"
     CANCEL_PROXY_VOTE = "cancel_proxy_vote"
     ADD_OPTION = "add_option"
+    DELETE_VOTE = "delete_vote"
 
 #====================
 # イベントハンドラ
@@ -1121,6 +1132,12 @@ async def cancel_proxy(interaction: discord.Interaction, voter: str):
     else:
         await interaction.response.send_message("⚠️取り消しできる投票がないよ")
 
+#=====!delete_vote コマンド====
+@bot.command()
+async def delete_vote(ctx):
+    view = VoteSelect(mode=VoteSelectMode.DELETE_VOTE, voter=None, agent_id=None)
+    await ctx.send("どの投票を削除するか選んでね", view=view)
+
 #---------------
 # メンバーリスト関係
 #---------------
@@ -1222,6 +1239,6 @@ async def context_ocr(interaction: discord.Interaction, message: discord.Message
         content="OCR結果のCSVだよ🫡",
         file=discord.File(filename)
     )
-    
+
 # Botを起動
 bot.run(os.getenv("DISCORD_TOKEN"))
