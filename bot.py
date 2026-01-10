@@ -4,23 +4,43 @@ from discord.ext import commands
 import asyncio
 import datetime
 import os
+import json
 
 # Botの準備
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# リマインダー辞書の読込
+def load_reminders():
+    if os.path.exists("reminders.json"):
+        with open("reminders.json", "r", encoding = "utf-8") as f:
+            load_data = json.load(f)
+            return {datetime.fromisoformat(key): value for key, value in load_data.Items()}
+        print(f"辞書ファイルを読込完了: {datetime.datetime.now()}")
+    else:
+        return {}
+
+# 辞書を定義
+rmd_dt = {}
+reminders = load_reminders()
+
 # Bot起動確認
 @bot.event
 async def on_ready():
     await bot.tree.sync()
     print(f"Botを起動: {bot.user}")
+    
+    # リマインダーループの開始
     print(f"ループ開始: {datetime.datetime.now()}")
     bot.loop.create_task(reminder_loop())
 
-# 空の辞書を定義
-reminders = {}
-rmd_dt = {}
+# 辞書をjsonファイルに保存
+def export_reminders():
+    global reminders
+    with open("/mnt/reminders/reminders.json", "w", encoding = "utf-8") as f:
+        json.dump({dt.isoformat(): value for dt, value in reminders.items()}, f, ensure_ascii=False, indent=2)
+    print(f"辞書ファイルを保存完了: {datetime.datetime.now()}")
 
 # 辞書登録処理
 def add_reminder(dt, repeat, interval, channel_id, msg):
@@ -29,6 +49,7 @@ def add_reminder(dt, repeat, interval, channel_id, msg):
         reminders[dt] = []
     # 辞書に項目を登録
     reminders[dt].append({"repeat": repeat, "interval": interval, "channel_id": channel_id, "msg": msg})
+    export_reminders()
 
 # /remind コマンド
 @bot.tree.command(name="remind", description="リマインダーをセットします")
@@ -89,6 +110,7 @@ async def reminder_loop():
             
             # 処理済の予定の削除
             del reminders[next_minute]
+            export_reminders()
             print(f"{next_minute}の予定を削除")
 
 # 予定の削除
@@ -101,6 +123,7 @@ async def reminder_loop():
 async def remind_delete(interaction: discord.Interaction, date: str, time: str, msg: str = None):
     dt = datetime.datetime.strptime(f"{date} {time}", "%Y/%m/%d %H:%M")
     del reminders[dt]
+    export_reminders()
     await interaction.response.send_message(f"{dt}のリマインダーを削除しました:saluting_face:")
     print(f"{dt}の予定を削除")
 
