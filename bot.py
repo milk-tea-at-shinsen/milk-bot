@@ -6,27 +6,33 @@ from discord import app_commands
 from discord.ext import commands
 from discord.ui import View, Select
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 import json
 import emoji
 from enum import Enum
+import csv, io
 
 # Botの準備
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 #===================================
 # 定数・グローバル変数・辞書の準備
 #===================================
+
+#=====タイムゾーンの指定=====
+JST = timezone(timedelta(hours=9), "JST")
+
 #=====辞書読込共通処理=====
 def load_data(data):
     # reminders.jsonが存在すれば
     if os.path.exists(f"/mnt/data/{data}.json"):
         #fileオブジェクト変数に格納
         with open(f"/mnt/data/{data}.json", "r", encoding = "utf-8") as file:
-            print(f"辞書ファイルを読込完了: {datetime.now()} - {data}")
+            print(f"辞書ファイルを読込完了: {datetime.now(JST)} - {data}")
             return json.load(file)
     else:
         #jsonが存在しない場合は、戻り値を空の辞書にする
@@ -58,7 +64,7 @@ def export_data(data: dict, name: str):
     with open(f"/mnt/data/{name}.json", "w", encoding = "utf-8") as file:
         # jsonファイルを保存
         json.dump(data, file, ensure_ascii=False, indent=2) 
-    print(f"辞書ファイルを保存完了: {datetime.now()} - {name}")
+    print(f"辞書ファイルを保存完了: {datetime.now(JST)} - {name}")
 
 #=====jsonファイル保存前処理=====
 #---リマインダー---
@@ -126,6 +132,7 @@ def remove_reminder(dt, idx=None):
 
 #---投票---
 def remove_poll(msg_id):
+    print("[start: remove_poll]")
     if msg_id in polls:
         removed = polls[msg_id]
         del polls[msg_id]
@@ -150,6 +157,7 @@ async def handle_remove_reminder(interaction, dt, idx):
 
 #---投票集計---
 async def make_poll_result(interaction, msg_id):
+    print("[start: make_poll_result]")
     # 投票辞書を読み込み
     options = polls[msg_id]["options"]
     # メッセージを読み込み
@@ -159,21 +167,31 @@ async def make_poll_result(interaction, msg_id):
     # 結果用辞書に結果を記録
     for i, reaction in enumerate(message.reactions):
         users = []
+        display_names = []
         async for user in reaction.users():
             if user != bot.user:
                 users.append(user.mention)
-        result[i] = {"emoji": reaction.emoji, "option":options[i], "count":len(users), "users":users}
-
-    return result
+                display_names.append(user.display_name)
+        result[i] = {
+            "emoji": reaction.emoji,
+            "option":options[i],
+            "count":len(users),
+            "users":users,
+            "display_names": display_names
+        }
+    dt = datetime.now(JST)
+    return dt, result
 
 #---投票結果表示---
-async def show_poll_result(interaction, result, msg_id):
-    # Embedで出力
+async def show_poll_result(interaction, dt, result, msg_id, mode):
+    print("[start: show_poll_result]")
+    # Embedの設定
     embed = discord.Embed(
-        title=polls[msg_id]["question"],
-        description="投票結果",
+        title="投票結果",
+        description=polls[msg_id]["question"],
         color=discord.Color.green()
     )
+    # 投票結果からフィールドを作成
     for i in result:
         emoji = result[i]["emoji"]
         option = result[i]["option"]
@@ -181,12 +199,107 @@ async def show_poll_result(interaction, result, msg_id):
         users = result[i]["users"]
         user_list = ", ".join(users) if users else "なし"
         embed.add_field(name=f"{emoji} {option} - {count}人", value=f"メンバー: {user_list}", inline=False)
-    
+    # フッター
+    if mode == "mid":
+        mode_str = "中間集計"
+    else:
+        mode_str = "最終結果"
+    embed.set_footer(text=f"{mode_str} - {dt.strftime('%Y/%m/%d %H:%M')}")
+    # embedを表示
     await interaction.message.edit(
-        content="投票結果",
+        content=None,
         embed=embed,
         allowed_mentions=discord.AllowedMentions.none(),
         view=None
+    )
+
+#---投票結果rows作成処理(選択肢グループ)---
+def make_grouped_rows(result):
+    print("[start: make_grouprd_rows]")
+    # 空のリストを用意
+    header = []
+    rows = []
+    users = []
+    max_users = 0
+    
+    # 選択肢リストと選択肢ごとのユーザーリストを作成
+    # resultをキー(インデックス)と値に分離
+    for i, value in result.items():
+        # 選択肢を連結
+        header.append(value["option"])
+        # 選択肢ごとの選択肢を連結
+        if value.get("display_names") is None:
+            users.append(value["users"])
+        else:
+            users.append(value["display_names"])
+        # ユーザーの最大値を取得
+        if len(value["users"]) > max_users:
+            max_users = len(value["users"])
+    
+    # ユーザーリストの行列を入れ替え
+    for i in range(max_users):
+        # rowをリセット
+        row = []
+        # 各ユーザーリストの同番のユーザーをrowに並べる
+        for j in range(len(header)):
+            if i < len(users[j]):
+                row.append(users[j][i])
+            # ユーザーリストを使い切っている場合は空欄を連結
+            else:
+                row.append("")
+        # rowをまとめてrowsを作る
+        rows.append(row)
+    
+    return header, rows
+
+#---投票結果rows作成処理(一覧)---
+def make_listed_rows(result):
+    print("[start: make_listed_rows]")
+    header = ["option", "users"]
+    rows = []
+    
+    for i, value in result.items():
+        for user in value["display_names"]:
+            rows.append([value["option"], user])
+    
+    return header, rows
+
+#---投票結果CSV作成処理---
+def make_csv(filename, meta, header, rows):
+    print("[start: make_csv]")
+    with open(filename, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        # metaの書込
+        for key, value in meta.items():
+            writer.writerow([f"#{key}: {value}"])
+        # headerの書込
+        writer.writerow(header)
+        # rowsの書込
+        writer.writerows(rows)
+
+#---投票結果CSV出力処理---
+async def export_poll_csv(interaction, result, msg_id, dt, mode):
+    print("[start: export_poll_csv]")
+    meta = {
+        "question": polls[msg_id]["question"],
+        "status": mode,
+        "collected_at": dt.strftime("%Y/%m/%d %H:%M")
+    }
+    
+    # csv(グループ型)の作成
+    header, rows = make_grouped_rows(result)
+    grouped_file = f"/tmp/{dt.strftime('%Y%m%d_%H%M')}_grouped.csv"
+    make_csv(grouped_file, meta, header, rows)
+    
+    # csv(リスト型)の作成
+    header, rows = make_listed_rows(result)
+    listed_file = f"/tmp/{dt.strftime('%Y%m%d_%H%M')}_listed.csv"
+    make_csv(listed_file, meta, header, rows)
+    
+    # discordに送信
+    await interaction.followup.send(
+        content="集計結果CSV",
+        files=[discord.File(grouped_file), discord.File(listed_file)]
     )
 
 #=====通知用ループ処理=====
@@ -194,7 +307,7 @@ async def reminder_loop():
     await bot.wait_until_ready()
     while not bot.is_closed():
         # 現在時刻を取得して次のゼロ秒までsleep
-        now = datetime.now()
+        now = datetime.now(JST)
         next_minute = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
         wait = (next_minute - now).total_seconds()
         await asyncio.sleep(wait)
@@ -210,7 +323,7 @@ async def reminder_loop():
                 channel = bot.get_channel(channel_id)
                 if channel:
                     await channel.send(f"{msg}")
-                    print (f"チャンネルにメッセージを送信: {datetime.now()}")
+                    print (f"チャンネルにメッセージを送信: {datetime.now(JST)}")
                 else:
                     print(f"チャンネル取得失敗: {channel_id}")
             
@@ -270,7 +383,7 @@ class ReminderSelect(View):
         idx = int(idx_str)
 
         # 予定の削除
-        handle_remove_reminder(interaction, dt, idx)
+        await handle_remove_reminder(interaction, dt, idx)
 
 #=====投票選択UIクラス=====
 class PollSelect(View):
@@ -305,21 +418,30 @@ class PollSelect(View):
     
     # 集計処理の関数定義
     async def select_callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
         msg_id = int(interaction.data["values"][0])
 
         # 集計処理
-        result = await make_poll_result(interaction, msg_id)
+        dt, result = await make_poll_result(interaction, msg_id)
         
-        # モード別処理
-        if self.mode == PollMode.SHOW_RESULT:
-            # 結果表示処理
-            await show_poll_result(interaction, result, msg_id)            
+        # 結果表示処理
+        if self.mode == PollResultMode.MID_RESULT:
+            mode = "mid"
+        else:
+            mode = "final"
+        await show_poll_result(interaction, dt, result, msg_id, mode)
+        
+        # CSV作成処理
+        await export_poll_csv(interaction, result, msg_id, dt, mode)
+        
+        # 投票辞書からの削除
+        if self.mode == PollResultMode.FINAL_RESULT:
+            remove_poll(msg_id)
 
-#=====投票モード切替クラス=====
-class PollMode(Enum):
-    SHOW_RESULT = "show_result"
-    EXPORT_CSV = "export_csv"
-    DELETE_POLL = "delete_poll"
+#=====集計モード切替クラス=====
+class PollResultMode(Enum):
+    MID_RESULT = "mid_result"
+    FINAL_RESULT = "final_result"
 
 #====================
 # イベントハンドラ
@@ -332,7 +454,7 @@ async def on_ready():
     print(f"同期されたコマンド: {[cmd.name for cmd in synced]}")
     
     # リマインダーループの開始
-    print(f"ループ開始: {datetime.now()}")
+    print(f"ループ開始: {datetime.now(JST)}")
     bot.loop.create_task(reminder_loop())
 
 #===============
@@ -355,7 +477,7 @@ async def on_ready():
 ])
 async def remind(interaction: discord.Interaction, date: str, time: str, msg: str, channel: discord.TextChannel = None, repeat: str = None, interval: int = 0):
     # 文字列引数からdatatime型に変換
-    dt = datetime.strptime(f"{date} {time}", "%Y/%m/%d %H:%M")
+    dt = datetime.strptime(f"{date} {time}", "%Y/%m/%d %H:%M").replace(tzinfo=JST)
 
     # チャンネルIDの取得
     if channel:
@@ -378,6 +500,7 @@ async def reminder_list(interaction: discord.Interaction):
     # remindersの中身を取り出してリストに格納
     for dt, value in reminders.items():
         dt_str = dt.strftime("%Y/%m/%d %H:%M")
+        # 同一日時の予定をrmd_dtに分解
         for rmd_dt in value:
             channel = bot.get_channel(rmd_dt["channel_id"])
             if channel:
@@ -458,17 +581,52 @@ async def poll(interaction: discord.Interaction,
     # 辞書に保存
     add_poll(message.id, question, options)
 
-#=====/show_result コマンド=====
-@bot.tree.command(name="show_result", description="投票結果を表示します")
-async def show_result(interaction: discord.Interaction):
+#=====/poll_result コマンド=====
+@bot.tree.command(name="poll_result", description="投票結果を表示します")
+@app_commands.describe(mode="集計モード")
+@app_commands.choices(mode=[
+    app_commands.Choice(name="中間集計", value="mid"),
+    app_commands.Choice(name="最終結果", value="final")
+])
+async def poll_result(interaction: discord.Interaction, mode: str):
     if polls:
-        view = PollSelect(polls, PollMode.SHOW_RESULT)
-        await interaction.response.send_message("結果表示する投票を選択", view=view)
+        if mode == "mid":
+            view = PollSelect(polls, PollResultMode.MID_RESULT)
+            await interaction.response.send_message("結果表示する投票を選択", view=view)
+        elif mode == "final":
+            view = PollSelect(polls, PollResultMode.FINAL_RESULT)
+            await interaction.response.send_message("結果表示する投票を選択", view=view)
+        else:
+            await interaction.response.send_message("集計モードの指定が不正です")
 
     # 投票がない場合のメッセージ
     else:
         await interaction.response.send_message("投票がありません")
 
-
+#=====/export_members コマンド=====
+@bot.tree.command(name="export_members", description="メンバーリストを出力します")
+async def export_members(interaction: discord.Interaction):
+    await interaction.response.defer()
+    guild = interaction.guild
+    
+    filename = f"/tmp/members_list_{datetime.now(JST).strftime('%Y%m%d_%H%M')}.csv"
+    meta = {
+        "members_at": guild.name,
+        "collected_at": datetime.now(JST).strftime("%Y/%m/%d %H:%M")
+    }
+    header = ["user_id", "display_name"]
+    rows = []
+    
+    async for member in guild.fetch_members(limit=None):
+        rows.append([member.id, member.display_name])
+    
+    make_csv(filename, meta, header, rows)
+    
+    # discordに送信
+    await interaction.followup.send(
+        content="メンバー一覧CSV",
+        file=discord.File(filename)
+    )
+    
 # Botを起動
 bot.run(os.getenv("DISCORD_TOKEN"))
