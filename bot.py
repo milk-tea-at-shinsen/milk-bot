@@ -1431,5 +1431,20 @@ async def remove_from_list(interaction: discord.Interaction, message: discord.Me
     else:
         await interaction.response.send_message(content=f"️⚠️リストの項目以外は削除できないよ", ephemeral=True)
 
+#====================
+# STT関係
+#====================
+@bot.command(name="join")
+async def join(ctx):
+    if ctx.author.voice:
+        if ctx.voice_client:
+            ctx.message.delete()
+            await ctx.send(content="⚠️すでにボイスチャンネルに接続してるよ", ephemeral=True)
+            return
+        else:
+            channel = ctx.author.voice.channel
+            await channel.connect()
+            await ctx.send(f"{channel.name}に接続したよ🫡")  
+
 # Botを起動
 bot.run(os.getenv("DISCORD_TOKEN"))
