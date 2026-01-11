@@ -1421,7 +1421,7 @@ async def remove_listed_ch(ctx):
         await ctx.send(f"{channel_name}をリスト化対象から削除したよ🫡")
     else:
         await ctx.message.delete()
-        await ctx.send(content=f"⚠️{channel_name}はリスト化対象ではないよ", ephemeral=True)
+        await ctx.send(content=f"⚠️{channel_name}はリスト化対象ではないよ")
 
 @bot.tree.context_menu(name="remove_from_list")
 async def remove_from_list(interaction: discord.Interaction, message: discord.Message):
@@ -1439,12 +1439,13 @@ async def join(ctx):
     if ctx.author.voice:
         if ctx.voice_client:
             ctx.message.delete()
-            await ctx.send(content="⚠️すでにボイスチャンネルに接続してるよ", ephemeral=True)
+            await ctx.send("⚠️すでにボイスチャンネルに接続してるよ")
             return
         else:
             channel = ctx.author.voice.channel
+            ctx.message.delete()
             await channel.connect()
-            await ctx.send(f"{channel.name}に接続したよ🫡")  
+            await ctx.send(f"{channel.name}に接続したよ🫡")
 
 # Botを起動
 bot.run(os.getenv("DISCORD_TOKEN"))
