@@ -1438,15 +1438,15 @@ async def remove_from_list(interaction: discord.Interaction, message: discord.Me
 async def join(ctx):
     if ctx.author.voice:
         if ctx.voice_client:
-            ctx.message.delete()
+            await ctx.message.delete()
             await ctx.send("⚠️すでにボイスチャンネルに接続してるよ")
         else:
             channel = ctx.author.voice.channel
-            ctx.message.delete()
+            await ctx.message.delete()
             await channel.connect()
             await ctx.send(f"{channel.name}に接続したよ🫡")
     else:
-        ctx.message.delete()
+        await ctx.message.delete()
         await ctx.send("⚠️先にボイスチャンネルに参加してね")
 
 # Botを起動
