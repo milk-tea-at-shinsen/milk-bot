@@ -1440,12 +1440,14 @@ async def join(ctx):
         if ctx.voice_client:
             ctx.message.delete()
             await ctx.send("⚠️すでにボイスチャンネルに接続してるよ")
-            return
         else:
             channel = ctx.author.voice.channel
             ctx.message.delete()
             await channel.connect()
             await ctx.send(f"{channel.name}に接続したよ🫡")
+    else:
+        ctx.message.delete()
+        await ctx.send("⚠️先にボイスチャンネルに参加してね")
 
 # Botを起動
 bot.run(os.getenv("DISCORD_TOKEN"))
