@@ -1119,7 +1119,7 @@ async def remind(
         ],
         default=None
     ),
-    interval: int = discord.Option("繰り返し間隔", default=0)
+    interval: int = discord.Option(description="繰り返し間隔", default=0)
 ):
     # 文字列引数からdatatime型に変換
     dt = datetime.strptime(f"{date} {time}", "%Y/%m/%d %H:%M").replace(tzinfo=JST)
