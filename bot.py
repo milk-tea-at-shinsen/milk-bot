@@ -832,10 +832,10 @@ class ReminderSelect(View):
                 placeholder="リマインダーを選択",
                 options = options
             )
+            select.callback = self.select_callback
             self.add_item(select)
     
     # 削除処理の関数定義
-    @select.callback
     async def select_callback(self, interaction: discord.Interaction):
         await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
         value = interaction.data["values"][0]
@@ -880,10 +880,10 @@ class VoteSelect(View):
                 placeholder="投票を選択",
                 options = options
             )
+            select.callback = self.select_callback
             self.add_item(select)
     
     # 投票選択後処理の関数定義
-    @select.callback
     async def select_callback(self, interaction: discord.Interaction):
         msg_id = int(interaction.data["values"][0])
 
@@ -970,10 +970,10 @@ class VoteOptionSelect(View):
                 max_values = len(options),
                 options = options
             )
+            select.callback = self.select_callback
             self.add_item(select)
 
     # 選択肢選択後の関数定義
-    @select.callback
     async def select_callback(self, interaction: discord.Interaction):
         await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
         guild = interaction.guild
