@@ -5,6 +5,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from discord.ui import View, Select
+from discord.sinks import AudioSink
 import asyncio
 from datetime import datetime, timedelta, timezone
 import os
@@ -15,17 +16,23 @@ import csv, io
 from google.cloud import vision
 from google.oauth2 import service_account
 import aiohttp
+import requests
 
-# Botの準備
+#=====Botの準備=====
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# サービスアカウントキーの読込
+#=====サービスアカウントキーの読込=====
+#---Vision API---
 info = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
 credentials = service_account.Credentials.from_service_account_info(info)
 client = vision.ImageAnnotatorClient(credentials=credentials)
+
+#---Watson STT---
+WATSON_STT_API_KEY = os.getenv("WATSON_STT_API_KEY")
+WATSON_STT_URL = os.getenv("WATSON_STT_URL")
 
 #===================================
 # 定数・グローバル変数・辞書の準備
@@ -1042,6 +1049,24 @@ class VoteSelectMode(Enum):
     ADD_OPTION = "add_option"
     DELETE_VOTE = "delete_vote"
 
+#===============
+# STT関係
+#===============
+#=====録音=====
+class OpusRecorder(AudioSink):
+    # クラスの初期設定
+    def __init__(self, filename):
+        super().__init__()
+        self.file = open(filename, "wb")
+
+    # 録音開始時
+    def write(self, data):
+        self.file.write(data.audio_data)
+
+    # 録音終了時
+    def cleanup(self):
+        self.file.close()
+
 #====================
 # イベントハンドラ
 #====================
@@ -1395,25 +1420,27 @@ async def context_ocr(interaction: discord.Interaction, message: discord.Message
 #---------------
 # リスト化関係
 #---------------
+#=====add_listed_ch コマンド=====
 @bot.command()
 async def add_listed_ch(ctx):
+    # コマンド実行チャンネルを取得
     channel_id = ctx.channel.id
-    print(f"channel_id: {channel_id}")
     channel_name = ctx.channel.name
-    print(f"channel_name: {channel_name}")
-    
+
+    # リスト化対象チャンネル辞書に登録
     add_make_list_channel(channel_id)
     
     await ctx.message.delete()
     await ctx.send(f"{channel_name}をリスト化対象にしたよ🫡\n今後は改行ごとに別の項目としてリスト化されるよ\nリストから削除する場合は、ロングタップ(PCの場合は右クリック)して、アプリ→**remove_from_list**で削除できるよ\n---")
 
+#=====remove_listed_ch コマンド=====
 @bot.command()
 async def remove_listed_ch(ctx):
+    # コマンド実行チャンネルを取得
     channel_id = ctx.channel.id
-    print(f"channel_id: {channel_id}")
     channel_name = ctx.channel.name
-    print(f"channel_name: {channel_name}")
-    
+
+    # リスト化対象チャンネル辞書から削除
     remove_ch = remove_make_list_channel(channel_id, channel_name)
     
     if remove_ch:
@@ -1423,31 +1450,96 @@ async def remove_listed_ch(ctx):
         await ctx.message.delete()
         await ctx.send(content=f"⚠️{channel_name}はリスト化対象ではないよ")
 
+#=====remove_from_list コマンド=====
 @bot.tree.context_menu(name="remove_from_list")
 async def remove_from_list(interaction: discord.Interaction, message: discord.Message):
+    # リスト化対象チャンネル内なら項目を削除
     if message.channel.id in make_list_channels["channels"]:
         await message.delete()
         await interaction.response.send_message(content=f"{message.content}を削除したよ🫡", ephemeral=True)
+    # リスト化対象チャンネル以外ならエラーを返す
     else:
         await interaction.response.send_message(content=f"️⚠️リストの項目以外は削除できないよ", ephemeral=True)
 
 #====================
 # STT関係
 #====================
+#=====join コマンド=====
 @bot.command(name="join")
 async def join(ctx):
+    # コマンド実行者がvc参加中の場合
     if ctx.author.voice:
+        # botが既にvc参加していればエラーメッセージを返す
         if ctx.voice_client:
             await ctx.message.delete()
             await ctx.send("⚠️すでにボイスチャンネルに接続してるよ")
+        # そうでなければコマンド実行者が参加中のvcに接続する
         else:
             channel = ctx.author.voice.channel
             await ctx.message.delete()
             await channel.connect()
             await ctx.send(f"{channel.name}に接続したよ🫡")
+    # コマンド実行者がvc参加していなければエラーメッセージを返す
     else:
         await ctx.message.delete()
         await ctx.send("⚠️先にボイスチャンネルに参加してね")
+
+#=====recstart コマンド=====
+@bot.command(name="recstart")
+async def recstart(ctx):
+    vc = ctx.voice_client
+    # botがvcに参加している場合
+    if vc:
+        # ファイル名を作成
+        ts = datetime.now(JST).strftime("%Y%m%d_%H%M")
+        filename = f"/tmp/vc_{ts}.opus
+        vc.recording_file = filename
+        
+        # 録音開始
+        sink = OpusRecorder(filename)
+        vc.listen(sink)
+
+        await ctx.message.delete()
+        await ctx.send("⏺録音を開始したよ🫡")
+
+    else:
+        await ctx.message.delete()
+        await ctx.send("⚠️先に`!join`を実行してね")
+
+#=====recstop コマンド=====
+@bot.command(name="recstop")
+async def recstop(ctx):
+    vc = ctx.voice_client
+    # botがvcに参加している場合
+    if vc:
+        vc.stop_listening()
+        filename = getattr(vc, "recording_file", None)
+        
+        if filename:
+            # 録音データが存在する場合、Watson APIに渡すデータを作成
+            await ctx.send("⏹録音停止！文字起こしを始めるよ🫡")
+            with open(filename, "rb") as f:
+                audio = f.read()
+            headers = {"Content-Type": "audio/ogg"}
+            auth = ("apikey": WATSON_STT_API_KEY)
+    
+            # Watson APIにデータを渡してjsonファイルを受け取る
+            response = requests.post(
+                WATSON_STT_URL,
+                headers=headers,
+                data=audio,
+                auth=auth
+            )
+
+            # jsonファイルをテキスト化
+            result = response.json()
+            text = result.get("results", [{}])[0].get("alternatives", [{}])[0].get("transcript", "")
+            # テキストファイルを保存
+            filename = filename.replace("opus", "txt")
+            with open(filename, "w", encoding="utf-8-sig") as f:
+                f.write(text)
+            
+            await ctx.send(f"文字起こしが終わったよ🫡",file=discord.File(filename))
 
 # Botを起動
 bot.run(os.getenv("DISCORD_TOKEN"))
