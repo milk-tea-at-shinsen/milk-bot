@@ -1107,11 +1107,11 @@ async def on_message(message):
 @bot.slash_command(name="remind", description="リマインダーをセットするよ")
 async def remind(
     interaction: discord.Interaction,
-    date: str = discord.Option("日付(yyyy/mm/dd)"),
-    time: str = discord.Option("時刻(hh:mm)"),
-    msg: str = discord.Option("内容"),
-    channel: discord.TextChannel = discord.Option("通知するチャンネル", default=None),
-    repeat: str = discord.Option("繰り返し単位", 
+    date: str = discord.Option(description="日付(yyyy/mm/dd)"),
+    time: str = discord.Option(description="時刻(hh:mm)"),
+    msg: str = discord.Option(description="内容"),
+    channel: discord.TextChannel = discord.Option(description="通知するチャンネル", default=None),
+    repeat: str = discord.Option(description="繰り返し単位", 
         choices=[
             discord.OptionChoice(name="日", value="day"),
             discord.OptionChoice(name="時間", value="hour"),
@@ -1188,17 +1188,17 @@ async def reminder_delete(interaction: discord.Interaction):
 #=====/vote コマンド=====
 @bot.slash_command(name="vote", description="投票を作成するよ")
 async def vote(interaction: discord.Interaction,
-    question: str = discord.Option("質問を書いてね"),
-    opt_1: str = discord.Option("1番目の選択肢を書いてね"),
-    opt_2: str = discord.Option("2番目の選択肢を書いてね", default=None),
-    opt_3: str = discord.Option("3番目の選択肢を書いてね", default=None),
-    opt_4: str = discord.Option("4番目の選択肢を書いてね", default=None),
-    opt_5: str = discord.Option("5番目の選択肢を書いてね", default=None),
-    opt_6: str = discord.Option("6番目の選択肢を書いてね", default=None),
-    opt_7: str = discord.Option("7番目の選択肢を書いてね", default=None),
-    opt_8: str = discord.Option("8番目の選択肢を書いてね", default=None),
-    opt_9: str = discord.Option("9番目の選択肢を書いてね", default=None),
-    opt_10: str = discord.Option("10番目の選択肢を書いてね", default=None)
+    question: str = discord.Option(description="質問を書いてね"),
+    opt_1: str = discord.Option(description="1番目の選択肢を書いてね"),
+    opt_2: str = discord.Option(description="2番目の選択肢を書いてね", default=None),
+    opt_3: str = discord.Option(description="3番目の選択肢を書いてね", default=None),
+    opt_4: str = discord.Option(description="4番目の選択肢を書いてね", default=None),
+    opt_5: str = discord.Option(description="5番目の選択肢を書いてね", default=None),
+    opt_6: str = discord.Option(description="6番目の選択肢を書いてね", default=None),
+    opt_7: str = discord.Option(description="7番目の選択肢を書いてね", default=None),
+    opt_8: str = discord.Option(description="8番目の選択肢を書いてね", default=None),
+    opt_9: str = discord.Option(description="9番目の選択肢を書いてね", default=None),
+    opt_10: str = discord.Option(description="10番目の選択肢を書いてね", default=None)
 ): 
     # 選択肢をリストに格納
     opts = [opt_1, opt_2, opt_3, opt_4, opt_5, opt_6, opt_7, opt_8, opt_9, opt_10]
@@ -1237,7 +1237,7 @@ async def vote_add_option(interaction: discord.Interaction):
 @bot.slash_command(name="vote_result", description="投票結果を表示するよ")
 async def vote_result(
     interaction: discord.Interaction,
-    mode: str = discord.Option("集計モード",
+    mode: str = discord.Option(description="集計モード",
         choices = [
             discord.OptionChoice(name="中間集計", value="mid"),
             discord.OptionChoice(name="最終結果", value="final")
@@ -1260,7 +1260,7 @@ async def vote_result(
 
 #=====/proxy_vote コマンド=====
 @bot.slash_command(name="proxy_vote", description="本人の代わりに代理投票するよ")
-async def proxy_vote(interaction: discord.Interaction, voter: str = discord.Option("投票する本人の名前を書いてね")):
+async def proxy_vote(interaction: discord.Interaction, voter: str = discord.Option(description="投票する本人の名前を書いてね")):
     if votes:
         agent_id = interaction.user.id
         view = VoteSelect(mode=VoteSelectMode.PROXY_VOTE, voter=voter, agent_id=agent_id)
@@ -1270,7 +1270,7 @@ async def proxy_vote(interaction: discord.Interaction, voter: str = discord.Opti
 
 #=====/cancel_proxy コマンド=====
 @bot.slash_command(name="cancel_proxy", description="投票済みの代理投票を取り消すよ")
-async def cancel_proxy(interaction: discord.Interaction, voter: str = discord.Option("投票者名")):
+async def cancel_proxy(interaction: discord.Interaction, voter: str = discord.Option(description="投票者名")):
     if votes:
         agent_id = interaction.user.id
         view = VoteSelect(mode=VoteSelectMode.CANCEL_PROXY_VOTE, voter=voter, agent_id=agent_id)
@@ -1338,8 +1338,8 @@ async def export_members(interaction: discord.Interaction):
 @app_commands.describe(minutes, counts = "件数指定(件)")
 async def table_ocr(
     interaction: discord.Interaction,
-    counts: str = discord.Option("時間指定(分)", default=None),
-    minutes: str = discord.Option("件数指定(件)", default=None)
+    counts: str = discord.Option(description="時間指定(分)", default=None),
+    minutes: str = discord.Option(description="件数指定(件)", default=None)
 ):
     await interaction.response.defer()
 
