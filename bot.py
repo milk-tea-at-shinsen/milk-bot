@@ -1492,7 +1492,7 @@ async def recstart(ctx):
     if vc:
         # ファイル名を作成
         ts = datetime.now(JST).strftime("%Y%m%d_%H%M")
-        filename = f"/tmp/vc_{ts}.opus
+        filename = f"/tmp/vc_{ts}.opus"
         vc.recording_file = filename
         
         # 録音開始
