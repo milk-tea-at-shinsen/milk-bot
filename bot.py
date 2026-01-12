@@ -1054,7 +1054,7 @@ class VoteSelectMode(Enum):
 #=====録音=====
 class OpusRecorder:
     # クラスの初期設定
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         self.data = bytearray()
 
     # 録音開始時
