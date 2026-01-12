@@ -1124,6 +1124,7 @@ async def remind(
     # 文字列引数からdatatime型に変換
     dt = datetime.strptime(f"{date} {time}", "%Y/%m/%d %H:%M").replace(tzinfo=JST)
 
+    print(channel)
     # チャンネルIDの取得
     if channel:
         channel_id = channel.id
