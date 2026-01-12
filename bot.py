@@ -1521,7 +1521,7 @@ async def recstop(ctx):
             with open(filename, "rb") as f:
                 audio = f.read()
             headers = {"Content-Type": "audio/ogg"}
-            auth = ("apikey": WATSON_STT_API_KEY)
+            auth = ("apikey", WATSON_STT_API_KEY)
     
             # Watson APIにデータを渡してjsonファイルを受け取る
             response = requests.post(
