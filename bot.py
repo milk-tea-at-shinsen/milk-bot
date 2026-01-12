@@ -5,7 +5,6 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from discord.ui import View, Select
-from discord.sinks import AudioSink
 import asyncio
 from datetime import datetime, timedelta, timezone
 import os
