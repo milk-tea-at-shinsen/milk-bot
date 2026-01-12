@@ -1335,7 +1335,6 @@ async def export_members(interaction: discord.Interaction):
 #---------------
 #=====/table_ocr コマンド=====
 @bot.slash_command(name="table_ocr", description="表の画像からCSVを作成するよ")
-@app_commands.describe(minutes, counts = "件数指定(件)")
 async def table_ocr(
     interaction: discord.Interaction,
     counts: str = discord.Option(description="時間指定(分)", default=None),
