@@ -1107,9 +1107,9 @@ async def on_message(message):
 @bot.slash_command(name="remind", description="リマインダーをセットするよ")
 async def remind(
     interaction: discord.Interaction,
-    date: str = discord.Option(description="日付(yyyy/mm/dd)"),
-    time: str = discord.Option(description="時刻(hh:mm)"),
-    msg: str = discord.Option(description="内容"),
+    date: str = discord.Option(description="日付(yyyy/mm/dd)", required=True),
+    time: str = discord.Option(description="時刻(hh:mm)", required=True),
+    msg: str = discord.Option(description="内容", required=True),
     channel: discord.TextChannel = discord.Option(discord.TextChannel, description="通知するチャンネル", default=None),
     repeat: str = discord.Option(description="繰り返し単位", 
         choices=[
@@ -1124,9 +1124,8 @@ async def remind(
     # 文字列引数からdatatime型に変換
     dt = datetime.strptime(f"{date} {time}", "%Y/%m/%d %H:%M").replace(tzinfo=JST)
 
-    print(channel)
     # チャンネルIDの取得
-    if channel:
+    if channel and isinstance(channel, discord.TextChannel):
         channel_id = channel.id
     else:
         channel_id = interaction.channel.id
