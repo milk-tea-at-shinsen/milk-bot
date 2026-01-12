@@ -2,7 +2,6 @@
 # ライブラリのインポート
 #=========================
 import discord
-from discord import app_commands
 from discord.ext import commands
 from discord.ui import View, Select
 import asyncio
@@ -249,6 +248,9 @@ def cancel_proxy_vote(msg_id, voter, agent_id):
             else:
                 print(f"キャンセル対象の代理投票がありません")
                 return None
+    else:
+        print(f"キャンセル対象の代理投票がありません")
+        return None
 
 #---リスト化対象チャンネル---
 def remove_make_list_channel(channel_id, channel_name):
@@ -830,10 +832,10 @@ class ReminderSelect(View):
                 placeholder="リマインダーを選択",
                 options = options
             )
-            select.callback = self.select_callback
             self.add_item(select)
     
     # 削除処理の関数定義
+    @select.callback
     async def select_callback(self, interaction: discord.Interaction):
         await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
         value = interaction.data["values"][0]
@@ -878,10 +880,10 @@ class VoteSelect(View):
                 placeholder="投票を選択",
                 options = options
             )
-            select.callback = self.select_callback
             self.add_item(select)
     
     # 投票選択後処理の関数定義
+    @select.callback
     async def select_callback(self, interaction: discord.Interaction):
         msg_id = int(interaction.data["values"][0])
 
@@ -968,10 +970,10 @@ class VoteOptionSelect(View):
                 max_values = len(options),
                 options = options
             )
-            select.callback = self.select_callback
             self.add_item(select)
 
     # 選択肢選択後の関数定義
+    @select.callback
     async def select_callback(self, interaction: discord.Interaction):
         await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
         guild = interaction.guild
@@ -996,7 +998,7 @@ class AddOptionInput(discord.ui.Modal):
         # ModalUIの定義
         self.inputs = []
         for i in range(self.lim):
-            text = discord.ui.TextInput(
+            text = discord.ui.InputText(
                 label=f"選択肢{i+1}",
                 required=(i == 0)
             )
@@ -1004,7 +1006,7 @@ class AddOptionInput(discord.ui.Modal):
             self.add_item(text)
 
     # 選択肢入力後の処理
-    async def on_submit(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction):
         print("[start: on submit]")
         await interaction.response.defer()
         await interaction.message.edit(content=f"{bot.user.display_name}が考え中…🤔", view=None)
@@ -1072,9 +1074,7 @@ class OpusRecorder:
 # Bot起動時処理
 @bot.event
 async def on_ready():
-    synced = await bot.tree.sync()
     print(f"Botを起動: {bot.user}")
-    print(f"同期されたコマンド: {[cmd.name for cmd in synced]}")
     
     # リマインダーループの開始
     print(f"ループ開始: {datetime.now(JST)}")
@@ -1104,28 +1104,23 @@ async def on_message(message):
 # リマインダー関係
 #---------------
 #=====/remind コマンド=====
-@bot.tree.command(name="remind", description="リマインダーをセットするよ")
-@app_commands.describe(
-    date="日付(yyyy/mm/dd)",
-    time="時刻(hh:mm)",
-    channel="通知するチャンネル",
-    repeat="繰り返し単位",
-    interval="繰り返し間隔",
-    msg="内容"
-)
-@app_commands.choices(repeat=[
-    app_commands.Choice(name="日", value="day"),
-    app_commands.Choice(name="時間", value="hour"),
-    app_commands.Choice(name="分", value="minute")
-])
+@bot.slash_command(name="remind", description="リマインダーをセットするよ")
 async def remind(
     interaction: discord.Interaction,
-    date: str,
-    time: str,
-    msg: str,
-    channel: discord.TextChannel = None,
-    repeat: str = None,
-    interval: int = 0):
+    date: str = discord.Option("日付(yyyy/mm/dd)"),
+    time: str = discord.Option("時刻(hh:mm)"),
+    msg: str = discord.Option("内容"),
+    channel: discord.TextChannel = discord.Option("通知するチャンネル", default=None),
+    repeat: str = discord.Option("繰り返し単位", 
+        choices=[
+            discord.OptionChoice(name="日", value="day"),
+            discord.OptionChoice(name="時間", value="hour"),
+            discord.OptionChoice(name="分", value="minute")
+        ],
+        default=None
+    ),
+    interval: int = discord.Option("繰り返し間隔", default=0)
+):
     # 文字列引数からdatatime型に変換
     dt = datetime.strptime(f"{date} {time}", "%Y/%m/%d %H:%M").replace(tzinfo=JST)
 
@@ -1149,7 +1144,7 @@ async def remind(
     print(f"予定を追加: {reminders[dt]}")
 
 #=====/reminder_list コマンド=====
-@bot.tree.command(name="reminder_list", description="リマインダーの一覧を表示するよ")
+@bot.slash_command(name="reminder_list", description="リマインダーの一覧を表示するよ")
 async def reminder_list(interaction: discord.Interaction):
     # 空のリストを作成
     items = []
@@ -1177,7 +1172,7 @@ async def reminder_list(interaction: discord.Interaction):
         await interaction.response.send_message("⚠️設定されているリマインダーがないよ", ephemeral=True)
 
 #=====/reminder_delete コマンド=====
-@bot.tree.command(name="reminder_delete", description="リマインダーを削除するよ")
+@bot.slash_command(name="reminder_delete", description="リマインダーを削除するよ")
 async def reminder_delete(interaction: discord.Interaction):
     # リマインダーが設定されている場合、選択メニューを表示
     if reminders:
@@ -1191,23 +1186,20 @@ async def reminder_delete(interaction: discord.Interaction):
 # 投票関係
 #---------------
 #=====/vote コマンド=====
-@bot.tree.command(name="vote", description="投票を作成するよ")
-@app_commands.describe(
-    question="質問を書いてね",
-    opt_1="1番目の選択肢を書いてね",
-    opt_2="2番目の選択肢を書いてね",
-    opt_3="3番目の選択肢を書いてね",
-    opt_4="4番目の選択肢を書いてね",
-    opt_5="5番目の選択肢を書いてね",
-    opt_6="6番目の選択肢を書いてね",
-    opt_7="7番目の選択肢を書いてね",
-    opt_8="8番目の選択肢を書いてね",
-    opt_9="9番目の選択肢を書いてね",
-    opt_10="10番目の選択肢を書いてね",
-)
+@bot.slash_command(name="vote", description="投票を作成するよ")
 async def vote(interaction: discord.Interaction,
-     question: str, opt_1: str, opt_2: str=None, opt_3: str=None, opt_4: str=None, opt_5: str=None,
-     opt_6: str=None, opt_7: str=None, opt_8: str=None, opt_9: str=None, opt_10: str=None): 
+    question: str = discord.Option("質問を書いてね"),
+    opt_1: str = discord.Option("1番目の選択肢を書いてね"),
+    opt_2: str = discord.Option("2番目の選択肢を書いてね", default=None),
+    opt_3: str = discord.Option("3番目の選択肢を書いてね", default=None),
+    opt_4: str = discord.Option("4番目の選択肢を書いてね", default=None),
+    opt_5: str = discord.Option("5番目の選択肢を書いてね", default=None),
+    opt_6: str = discord.Option("6番目の選択肢を書いてね", default=None),
+    opt_7: str = discord.Option("7番目の選択肢を書いてね", default=None),
+    opt_8: str = discord.Option("8番目の選択肢を書いてね", default=None),
+    opt_9: str = discord.Option("9番目の選択肢を書いてね", default=None),
+    opt_10: str = discord.Option("10番目の選択肢を書いてね", default=None)
+): 
     # 選択肢をリストに格納
     opts = [opt_1, opt_2, opt_3, opt_4, opt_5, opt_6, opt_7, opt_8, opt_9, opt_10]
     options = [opt for opt in opts if opt and opt.strip()]
@@ -1232,7 +1224,7 @@ async def vote(interaction: discord.Interaction,
     add_vote(message.id, question, reactions, options)
 
 #=====/vote_add_option コマンド=====
-@bot.tree.command(name="vote_add_option", description="投票に選択肢を追加するよ")
+@bot.slash_command(name="vote_add_option", description="投票に選択肢を追加するよ")
 async def vote_add_option(interaction: discord.Interaction):
     if votes:
         view = VoteSelect(mode=VoteSelectMode.ADD_OPTION, voter=None, agent_id=None)
@@ -1242,13 +1234,16 @@ async def vote_add_option(interaction: discord.Interaction):
         await interaction.response.send_message("⚠️実施中の投票がないよ", ephemeral=True)
 
 #=====/vote_result コマンド=====
-@bot.tree.command(name="vote_result", description="投票結果を表示するよ")
-@app_commands.describe(mode="集計モード")
-@app_commands.choices(mode=[
-    app_commands.Choice(name="中間集計", value="mid"),
-    app_commands.Choice(name="最終結果", value="final")
-])
-async def vote_result(interaction: discord.Interaction, mode: str):
+@bot.slash_command(name="vote_result", description="投票結果を表示するよ")
+async def vote_result(
+    interaction: discord.Interaction,
+    mode: str = discord.Option("集計モード",
+        choices = [
+            discord.OptionChoice(name="中間集計", value="mid"),
+            discord.OptionChoice(name="最終結果", value="final")
+        ]
+    )
+):
     if votes:
         if mode == "mid":
             view = VoteSelect(mode=VoteSelectMode.MID_RESULT, voter=None, agent_id=None)
@@ -1264,9 +1259,8 @@ async def vote_result(interaction: discord.Interaction, mode: str):
         await interaction.response.send_message("⚠️集計できる投票がないよ", ephemeral=True)
 
 #=====/proxy_vote コマンド=====
-@bot.tree.command(name="proxy_vote", description="本人の代わりに代理投票するよ")
-@app_commands.describe(voter = "投票する本人の名前を書いてね")
-async def proxy_vote(interaction: discord.Interaction, voter: str):
+@bot.slash_command(name="proxy_vote", description="本人の代わりに代理投票するよ")
+async def proxy_vote(interaction: discord.Interaction, voter: str = discord.Option("投票する本人の名前を書いてね")):
     if votes:
         agent_id = interaction.user.id
         view = VoteSelect(mode=VoteSelectMode.PROXY_VOTE, voter=voter, agent_id=agent_id)
@@ -1275,9 +1269,8 @@ async def proxy_vote(interaction: discord.Interaction, voter: str):
         await interaction.response.send_message("⚠️代理投票できる投票がないよ", ephemeral=True)
 
 #=====/cancel_proxy コマンド=====
-@bot.tree.command(name="cancel_proxy", description="投票済みの代理投票を取り消すよ")
-@app_commands.describe(voter = "投票者名")
-async def cancel_proxy(interaction: discord.Interaction, voter: str):
+@bot.slash_command(name="cancel_proxy", description="投票済みの代理投票を取り消すよ")
+async def cancel_proxy(interaction: discord.Interaction, voter: str = discord.Option("投票者名")):
     if votes:
         agent_id = interaction.user.id
         view = VoteSelect(mode=VoteSelectMode.CANCEL_PROXY_VOTE, voter=voter, agent_id=agent_id)
@@ -1296,7 +1289,7 @@ async def delete_vote(ctx):
         await ctx.send("⚠️取り消しできる投票がないよ", ephemeral=True)
 
 #=====context_reaction_count コマンド=====
-@bot.tree.context_menu(name="context_reaction_count")
+@bot.message_command(name="context_reaction_count")
 async def context_reaction_count(interaction: discord.Interaction, message: discord.Message):
     if not message.reactions:
         await interaction.response.send_message(content="️⚠️リアクションがついてないよ", ephemeral=True)
@@ -1316,7 +1309,7 @@ async def context_reaction_count(interaction: discord.Interaction, message: disc
 # メンバーリスト関係
 #---------------
 #=====/export_members コマンド=====
-@bot.tree.command(name="export_members", description="サーバーのメンバーリストを出力するよ")
+@bot.slash_command(name="export_members", description="サーバーのメンバーリストを出力するよ")
 async def export_members(interaction: discord.Interaction):
     await interaction.response.defer()
     guild = interaction.guild
@@ -1341,9 +1334,13 @@ async def export_members(interaction: discord.Interaction):
 # OCR関係
 #---------------
 #=====/table_ocr コマンド=====
-@bot.tree.command(name="table_ocr", description="表の画像からCSVを作成するよ")
-@app_commands.describe(minutes = "時間指定(分)", counts = "件数指定(件)")
-async def table_ocr(interaction: discord.Interaction, counts: str = None, minutes: str = None):
+@bot.slash_command(name="table_ocr", description="表の画像からCSVを作成するよ")
+@app_commands.describe(minutes, counts = "件数指定(件)")
+async def table_ocr(
+    interaction: discord.Interaction,
+    counts: str = discord.Option("時間指定(分)", default=None),
+    minutes: str = discord.Option("件数指定(件)", default=None)
+):
     await interaction.response.defer()
 
     # チャンネルの最新メッセージを取得
@@ -1383,7 +1380,7 @@ async def table_ocr(interaction: discord.Interaction, counts: str = None, minute
     )
 
 #=====context_ocr コマンド=====
-@bot.tree.context_menu(name="context_ocr")
+@bot.message_command(name="context_ocr")
 async def context_ocr(interaction: discord.Interaction, message: discord.Message):
 
     if not message.attachments:
@@ -1450,7 +1447,7 @@ async def remove_listed_ch(ctx):
         await ctx.send(content=f"⚠️{channel_name}はリスト化対象ではないよ")
 
 #=====remove_from_list コマンド=====
-@bot.tree.context_menu(name="remove_from_list")
+@bot.message_command(name="remove_from_list")
 async def remove_from_list(interaction: discord.Interaction, message: discord.Message):
     # リスト化対象チャンネル内なら項目を削除
     if message.channel.id in make_list_channels["channels"]:
