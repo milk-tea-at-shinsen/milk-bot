@@ -1110,7 +1110,7 @@ async def remind(
     date: str = discord.Option(description="日付(yyyy/mm/dd)"),
     time: str = discord.Option(description="時刻(hh:mm)"),
     msg: str = discord.Option(description="内容"),
-    channel: discord.TextChannel | None = discord.Option(description="通知するチャンネル", default=None),
+    channel: discord.TextChannel = discord.Option(discord.TextChannel, description="通知するチャンネル", default=None),
     repeat: str = discord.Option(description="繰り返し単位", 
         choices=[
             discord.OptionChoice(name="日", value="day"),
