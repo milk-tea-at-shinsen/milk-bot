@@ -1052,19 +1052,19 @@ class VoteSelectMode(Enum):
 # STT関係
 #===============
 #=====録音=====
-class OpusRecorder(AudioSink):
+class OpusRecorder:
     # クラスの初期設定
-    def __init__(self, filename):
-        super().__init__()
-        self.file = open(filename, "wb")
+    def __init__(self):
+        self.data = bytearray()
 
     # 録音開始時
-    def write(self, data):
-        self.file.write(data.audio_data)
+    def write(self, data, filename):
+        self.data.extend(data)
+        self.filename = filename
 
     # 録音終了時
-    def cleanup(self):
-        self.file.close()
+    def get_opus(self):
+        return bytes(self.data)
 
 #====================
 # イベントハンドラ
@@ -1495,8 +1495,8 @@ async def recstart(ctx):
         vc.recording_file = filename
         
         # 録音開始
-        sink = OpusRecorder(filename)
-        vc.listen(sink)
+        recorder = OpusRecorder(filename)
+        vc.listen(recorder)
 
         await ctx.message.delete()
         await ctx.send("⏺録音を開始したよ🫡")
@@ -1512,7 +1512,7 @@ async def recstop(ctx):
     # botがvcに参加している場合
     if vc:
         vc.stop_listening()
-        filename = getattr(vc, "recording_file", None)
+        filename = OpusRecorder.filename
         
         if filename:
             # 録音データが存在する場合、Watson APIに渡すデータを作成
