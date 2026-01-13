@@ -444,8 +444,10 @@ async def make_vote_result(interaction, msg_id):
                             except:
                                 agent_user = None
                         if agent_member or agent_user:
-                            print(dir(agent_member))
-                            print(dir(agent_user))
+                            print(f"member: {dir(agent_member)}")
+                            print(f"agent_member:\nname:{agent_member.name}\nnick:{agent_member.nick}\ndisplay_name:{agent_member.display_name}")
+                            print(f"user: {dir(agent_user)}")
+                            print(f"agent_user:\nname:{agent_user.name}\ndisplay_name:{agent_user.display_name}")
                             agent_display_name = agent_member.nick or agent_user.display_name or agent_member.name
                         else:
                             agent_display_name = "Unknown"
