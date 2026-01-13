@@ -1,4 +1,5 @@
-discord.py>=2.3.2
+py-cord==2.5.0
 emoji>=2.2.0
 google-cloud-vision
 aiohttp
+PyNaCl==1.5.0
