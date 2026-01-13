@@ -97,6 +97,18 @@ print(f"dict make_list_channels: {make_list_channels}")
 # 共通処理関数
 #===============
 #---------------
+# デコレーター
+#---------------
+#=====スラッシュコマンドの引数整理=====
+def clean_slash_options(func):
+    async def wrapper(interaction, *args, **kwargs):
+        cleaned = {
+            k: (None if isinstance(v, discord.Option) else v)
+            for k, v in kwarg.items()
+        }
+        return await func(interaction, **cleaned)
+
+#---------------
 # 辞書関係
 #---------------
 #=====辞書をjsonファイルに保存=====
@@ -1104,28 +1116,30 @@ async def on_message(message):
 # リマインダー関係
 #---------------
 #=====/remind コマンド=====
+@clean_slash_options
 @bot.slash_command(name="remind", description="リマインダーをセットするよ")
 async def remind(
     interaction: discord.Interaction,
-    date: str = discord.Option(description="日付(yyyy/mm/dd)", required=True),
-    time: str = discord.Option(description="時刻(hh:mm)", required=True),
-    msg: str = discord.Option(description="内容", required=True),
-    channel: discord.TextChannel = discord.Option(discord.TextChannel, description="通知するチャンネル", default=None),
+    date: str = discord.Option(description="日付(yyyy/mm/dd)"),
+    time: str = discord.Option(description="時刻(hh:mm)"),
+    msg: str = discord.Option(description="内容"),
+    channel: discord.TextChannel = discord.Option(discord.TextChannel, description="通知するチャンネル", required=False),
     repeat: str = discord.Option(description="繰り返し単位", 
         choices=[
             discord.OptionChoice(name="日", value="day"),
             discord.OptionChoice(name="時間", value="hour"),
             discord.OptionChoice(name="分", value="minute")
         ],
-        default=None
+        required=False
     ),
     interval: int = discord.Option(description="繰り返し間隔", default=0)
 ):
+
     # 文字列引数からdatatime型に変換
     dt = datetime.strptime(f"{date} {time}", "%Y/%m/%d %H:%M").replace(tzinfo=JST)
 
     # チャンネルIDの取得
-    if channel and isinstance(channel, discord.TextChannel):
+    if channel:
         channel_id = channel.id
     else:
         channel_id = interaction.channel.id
@@ -1186,22 +1200,25 @@ async def reminder_delete(interaction: discord.Interaction):
 # 投票関係
 #---------------
 #=====/vote コマンド=====
+@clean_slash_options
 @bot.slash_command(name="vote", description="投票を作成するよ")
 async def vote(interaction: discord.Interaction,
     question: str = discord.Option(description="質問を書いてね"),
     opt_1: str = discord.Option(description="1番目の選択肢を書いてね"),
-    opt_2: str = discord.Option(description="2番目の選択肢を書いてね", default=None),
-    opt_3: str = discord.Option(description="3番目の選択肢を書いてね", default=None),
-    opt_4: str = discord.Option(description="4番目の選択肢を書いてね", default=None),
-    opt_5: str = discord.Option(description="5番目の選択肢を書いてね", default=None),
-    opt_6: str = discord.Option(description="6番目の選択肢を書いてね", default=None),
-    opt_7: str = discord.Option(description="7番目の選択肢を書いてね", default=None),
-    opt_8: str = discord.Option(description="8番目の選択肢を書いてね", default=None),
-    opt_9: str = discord.Option(description="9番目の選択肢を書いてね", default=None),
-    opt_10: str = discord.Option(description="10番目の選択肢を書いてね", default=None)
+    opt_2: str = discord.Option(description="2番目の選択肢を書いてね", required=False),
+    opt_3: str = discord.Option(description="3番目の選択肢を書いてね", required=False),
+    opt_4: str = discord.Option(description="4番目の選択肢を書いてね", required=False),
+    opt_5: str = discord.Option(description="5番目の選択肢を書いてね", required=False),
+    opt_6: str = discord.Option(description="6番目の選択肢を書いてね", required=False),
+    opt_7: str = discord.Option(description="7番目の選択肢を書いてね", required=False),
+    opt_8: str = discord.Option(description="8番目の選択肢を書いてね", required=False),
+    opt_9: str = discord.Option(description="9番目の選択肢を書いてね", required=False),
+    opt_10: str = discord.Option(description="10番目の選択肢を書いてね", required=False)
 ): 
+
     # 選択肢をリストに格納
-    opts = [opt_1, opt_2, opt_3, opt_4, opt_5, opt_6, opt_7, opt_8, opt_9, opt_10]
+    raw_opts = [opt_1, opt_2, opt_3, opt_4, opt_5, opt_6, opt_7, opt_8, opt_9, opt_10]
+    opts = [opt for opt in raw_opts if not isinstance(opt, discord.Option)]
     options = [opt for opt in opts if opt and opt.strip()]
     # リアクションリスト
     reacts = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
@@ -1334,11 +1351,12 @@ async def export_members(interaction: discord.Interaction):
 # OCR関係
 #---------------
 #=====/table_ocr コマンド=====
+@clean_slash_options
 @bot.slash_command(name="table_ocr", description="表の画像からCSVを作成するよ")
 async def table_ocr(
     interaction: discord.Interaction,
-    counts: str = discord.Option(description="時間指定(分)", default=None),
-    minutes: str = discord.Option(description="件数指定(件)", default=None)
+    counts: str = discord.Option(description="時間指定(分)", required=False),
+    minutes: str = discord.Option(description="件数指定(件)", required=False)
 ):
     await interaction.response.defer()
 
