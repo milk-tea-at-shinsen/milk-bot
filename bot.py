@@ -1485,7 +1485,7 @@ async def join(ctx):
             channel = ctx.author.voice.channel
             await ctx.message.delete()
             await channel.connect()
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(2)
             await ctx.send(f"{channel.name}に接続したよ🫡")
     # コマンド実行者がvc参加していなければエラーメッセージを返す
     else:
