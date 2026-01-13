@@ -808,15 +808,6 @@ async def handle_make_list(message):
 # クラス定義
 #===============
 #---------------
-# 共通処理関係
-#---------------
-class MyBot(commands.Bot):
-    def name(self, guild=None):
-        if guild and guild.me:
-            return guild.me.nick or guild.me.display_name
-        return self.user.display_name
-
-#---------------
 # リマインダー関係
 #---------------
 #=====リマインダー選択=====
@@ -852,7 +843,7 @@ class ReminderSelect(View):
     
     # 削除処理の関数定義
     async def select_callback(self, interaction: discord.Interaction):
-        await interaction.response.edit_message(content=f"{bot.name(interaction.guild)}が考え中…🤔", view=None)
+        await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
         value = interaction.data["values"][0]
         # 日時とインデックスを分離
         dt_str, idx_str = value.split("|")
@@ -904,13 +895,13 @@ class VoteSelect(View):
 
         # 代理投票
         if self.mode == VoteSelectMode.PROXY_VOTE:
-            await interaction.response.edit_message(content=f"{bot.name(interaction.guild)}が考え中…🤔", view=None)
+            await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
             view = VoteOptionSelect(msg_id, self.voter, self.agent_id)
             await interaction.message.edit(content="代理投票する選択肢を選んでね", view=view)
         # 代理投票キャンセル
         elif self.mode == VoteSelectMode.CANCEL_PROXY_VOTE:
             removed = cancel_proxy_vote(msg_id, self.voter, self.agent_id)
-            await interaction.response.edit_message(content=f"{bot.name(interaction.guild)}が考え中…🤔", view=None)
+            await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
             if removed:
                 await interaction.message.edit(content=f"**{self.voter}** の分の代理投票を取り消したよ🫡")
             else:
@@ -933,7 +924,7 @@ class VoteSelect(View):
             await interaction.followup.send(content="投票を削除したよ🫡", ephemeral=True)
         # 集計
         else:
-            await interaction.response.edit_message(content=f"{bot.name(interaction.guild)}が考え中…🤔", view=None)
+            await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
             dt, result = await make_vote_result(interaction, msg_id)
 
             # 結果表示処理
@@ -990,7 +981,7 @@ class VoteOptionSelect(View):
 
     # 選択肢選択後の関数定義
     async def select_callback(self, interaction: discord.Interaction):
-        await interaction.response.edit_message(content=f"{bot.name(interaction.guild)}が考え中…🤔", view=None)
+        await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
         guild = interaction.guild
         
         opt_idx = [int(opt_str) for opt_str in interaction.data["values"]]
@@ -1024,7 +1015,7 @@ class AddOptionInput(discord.ui.Modal):
     async def callback(self, interaction: discord.Interaction):
         print("[start: on submit]")
         await interaction.response.defer()
-        await interaction.message.edit(content=f"{bot.name(interaction.guild)}が考え中…🤔", view=None)
+        await interaction.message.edit(content=f"{bot.user.display_name}が考え中…🤔", view=None)
         # 追加選択肢をリスト化
         add_options = [add_opt.value for add_opt in self.inputs if add_opt.value.strip()]
         # 辞書の内容を取得
