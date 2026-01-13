@@ -451,7 +451,7 @@ async def make_vote_result(interaction, msg_id):
                             agent_display_name = agent_member.nick or agent_user.display_name or agent_member.name
                         else:
                             agent_display_name = "Unknown"
-            
+
                         users.append(f"{voter}(by:{agent_display_name})")
 
         if options:
