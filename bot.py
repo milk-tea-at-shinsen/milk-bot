@@ -1499,11 +1499,11 @@ async def recstart(ctx):
     if vc:
         # ファイル名を作成
         ts = datetime.now(JST).strftime("%Y%m%d_%H%M")
-        filename = f"/tmp/vc_{ts}.opus"
-        vc.recording_file = filename
+        filename = f"/tmp/vc_{ts}.ogg"
         
         # 録音開始
         recorder = OpusRecorder(filename)
+        vc.recorder = recorder
         vc.listen(recorder)
 
         await ctx.message.delete()
@@ -1520,32 +1520,40 @@ async def recstop(ctx):
     # botがvcに参加している場合
     if vc:
         vc.stop_listening()
-        filename = OpusRecorder.filename
+        filename = vc.recorder.filename
         
         if filename:
             # 録音データが存在する場合、Watson APIに渡すデータを作成
             await ctx.send("⏹録音停止！文字起こしを始めるよ🫡")
             with open(filename, "rb") as f:
                 audio = f.read()
-            headers = {"Content-Type": "audio/ogg"}
+            headers = {"Content-Type": "audio/ogg;codecs=opus"}
             auth = ("apikey", WATSON_STT_API_KEY)
     
             # Watson APIにデータを渡してjsonファイルを受け取る
-            response = requests.post(
-                WATSON_STT_URL,
-                headers=headers,
-                data=audio,
-                auth=auth
+            response = await.loop.run_in_exector(
+                None,
+                lambda: requests.post(
+                    WATSON_STT_URL,
+                    headers=headers,
+                    data=audio,
+                    auth=auth
+                )
             )
 
             # jsonファイルをテキスト化
             result = response.json()
             text = result.get("results", [{}])[0].get("alternatives", [{}])[0].get("transcript", "")
+
+            # テキストが空の場合
+            if not text.strip():
+                text = "(何もしゃべってなかったみたい…)"
+
             # テキストファイルを保存
             filename = filename.replace("opus", "txt")
             with open(filename, "w", encoding="utf-8-sig") as f:
                 f.write(text)
-            
+
             await ctx.send(f"文字起こしが終わったよ🫡",file=discord.File(filename))
 
 # Botを起動
