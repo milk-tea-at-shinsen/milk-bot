@@ -1312,7 +1312,7 @@ async def delete_vote(ctx):
         await ctx.message.delete()
         await ctx.send("どの投票を削除するか選んでね", view=view)
     else:
-        await ctx.send("⚠️取り消しできる投票がないよ", ephemeral=True)
+        await ctx.send("⚠️取り消しできる投票がないよ")
 
 #=====context_reaction_count コマンド=====
 @bot.message_command(name="context_reaction_count")
