@@ -23,6 +23,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
+bot_display_name = bot.nick or bot.global_name
 
 #=====サービスアカウントキーの読込=====
 #---Vision API---
@@ -386,21 +387,6 @@ def reaction_replace(options, reactions):
 
     return options, reactions
 
-#=====メンションの解決=====
-async def resolve_mention(guild, user):
-    if isinstance(user, discord.Member):
-        return user.mention
-    
-    try:
-        member = guild.get_member(user.id)
-        if member:
-            return member.mention
-        else:
-            member = await guild.fetch_member(user.id)
-            return member.mention
-    except:
-        return f"<@{user.id}>"
-
 #=====投票選択肢embed作成=====
 def make_embed_text(options, reactions, question, description):
     for i, opt in enumerate(options):
@@ -431,7 +417,7 @@ async def make_vote_result(interaction, msg_id):
         # リアクション投票分
         # リアクションしたユーザーがbotでなければリストに追加
         reaction_users = [reaction_user async for reaction_user in reaction.users() if reaction_user != bot.user]
-        users = [user.display_name for user in reaction_users]
+        users = [user.nick or user.global_name for user in reaction_users]
         
         # 代理投票分
         if msg_id in proxy_votes:
@@ -450,11 +436,11 @@ async def make_vote_result(interaction, msg_id):
                             except:
                                 agent = None
                         if agent:
-                            agent_display_name = agent.display_name
+                            agent_display_name = agent.nick or agent.global_name
                         else:
                             agent_display_name = "Unknown"
             
-                        users.append(f"{voter}(by{agent_display_name})")
+                        users.append(f"{voter}(by:{agent_display_name})")
 
         if options:
             result[i] = {
@@ -858,7 +844,7 @@ class ReminderSelect(View):
     
     # 削除処理の関数定義
     async def select_callback(self, interaction: discord.Interaction):
-        await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
+        await interaction.response.edit_message(content=f"{bot_display_name}が考え中…🤔", view=None)
         value = interaction.data["values"][0]
         # 日時とインデックスを分離
         dt_str, idx_str = value.split("|")
@@ -910,13 +896,13 @@ class VoteSelect(View):
 
         # 代理投票
         if self.mode == VoteSelectMode.PROXY_VOTE:
-            await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
+            await interaction.response.edit_message(content=f"{bot_display_name}が考え中…🤔", view=None)
             view = VoteOptionSelect(msg_id, self.voter, self.agent_id)
             await interaction.message.edit(content="代理投票する選択肢を選んでね", view=view)
         # 代理投票キャンセル
         elif self.mode == VoteSelectMode.CANCEL_PROXY_VOTE:
             removed = cancel_proxy_vote(msg_id, self.voter, self.agent_id)
-            await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
+            await interaction.response.edit_message(content=f"{bot_display_name}が考え中…🤔", view=None)
             if removed:
                 await interaction.message.edit(content=f"**{self.voter}** の分の代理投票を取り消したよ🫡")
             else:
@@ -939,7 +925,7 @@ class VoteSelect(View):
             await interaction.followup.send(content="投票を削除したよ🫡", ephemeral=True)
         # 集計
         else:
-            await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
+            await interaction.response.edit_message(content=f"{bot_display_name}が考え中…🤔", view=None)
             dt, result = await make_vote_result(interaction, msg_id)
 
             # 結果表示処理
@@ -996,14 +982,14 @@ class VoteOptionSelect(View):
 
     # 選択肢選択後の関数定義
     async def select_callback(self, interaction: discord.Interaction):
-        await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
+        await interaction.response.edit_message(content=f"{bot_display_name}が考え中…🤔", view=None)
         guild = interaction.guild
         
         opt_idx = [int(opt_str) for opt_str in interaction.data["values"]]
         
         add_proxy_vote(self.msg_id, self.voter, self.agent_id, opt_idx)
         agent = guild.get_member(self.agent_id)
-        agent_display_name = agent.display_name
+        agent_display_name = agent.nick or agent.global_name
         await interaction.message.edit(content=f"**{agent_display_name}** から **{self.voter}** の分の投票を受け付けたよ🫡")
 
 #=====追加選択肢入力=====
@@ -1030,7 +1016,7 @@ class AddOptionInput(discord.ui.Modal):
     async def callback(self, interaction: discord.Interaction):
         print("[start: on submit]")
         await interaction.response.defer()
-        await interaction.message.edit(content=f"{bot.user.display_name}が考え中…🤔", view=None)
+        await interaction.message.edit(content=f"{bot_display_name}が考え中…🤔", view=None)
         # 追加選択肢をリスト化
         add_options = [add_opt.value for add_opt in self.inputs if add_opt.value.strip()]
         # 辞書の内容を取得
@@ -1346,7 +1332,7 @@ async def export_members(ctx: discord.ApplicationContext):
         "collected_at": datetime.now(JST).strftime("%Y/%m/%d %H:%M")
     }
     header = ["user_id", "user_name", "display_name", "is_bot"]
-    rows = [[member.id, member.name, member.display_name, member.bot] async for member in guild.fetch_members(limit=None)]
+    rows = [[member.id, member.name, member.nick or member.global_name, member.bot] async for member in guild.fetch_members(limit=None)]
     
     make_csv(filename, rows, meta, header)
     
