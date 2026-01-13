@@ -108,6 +108,8 @@ print(f"dict make_list_channels: {make_list_channels}")
 #=====スラッシュコマンドの引数整理=====
 def clean_slash_options(func):
     async def wrapper(interaction, *args, **kwargs):
+        print("[run wrapper]")
+        print(f"args: {args}\nkwargs: {kwargs}")
         cleaned = {
             k: (None if isinstance(v, discord.Option) else v)
             for k, v in kwargs.items()
@@ -1141,7 +1143,7 @@ async def remind(
     ),
     interval: int = discord.Option(description="繰り返し間隔", default=0)
 ):
-
+    print(f"channel: {channel}")
     # 文字列引数からdatatime型に変換
     dt = datetime.strptime(f"{date} {time}", "%Y/%m/%d %H:%M").replace(tzinfo=JST)
 
