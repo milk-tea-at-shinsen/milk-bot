@@ -15,6 +15,7 @@ from google.cloud import vision
 from google.oauth2 import service_account
 import aiohttp
 import requests
+from functools import wraps
 
 #=====Botの準備=====
 intents = discord.Intents.default()
@@ -107,6 +108,7 @@ print(f"dict make_list_channels: {make_list_channels}")
 #---------------
 #=====スラッシュコマンドの引数整理=====
 def clean_slash_options(func):
+    @wraps(func)
     async def wrapper(interaction, *args, **kwargs):
         print("[run wrapper]")
         print(f"args: {args}\nkwargs: {kwargs}")
