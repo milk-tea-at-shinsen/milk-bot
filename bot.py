@@ -1209,20 +1209,20 @@ async def reminder_delete(interaction: discord.Interaction):
 # 投票関係
 #---------------
 #=====/vote コマンド=====
-@clean_slash_options
 @bot.slash_command(name="vote", description="投票を作成するよ")
+@clean_slash_options
 async def vote(interaction: discord.Interaction,
-    question: str = discord.Option(description="質問を書いてね"),
-    opt_1: str = discord.Option(description="1番目の選択肢を書いてね"),
-    opt_2: str = discord.Option(description="2番目の選択肢を書いてね", required=False),
-    opt_3: str = discord.Option(description="3番目の選択肢を書いてね", required=False),
-    opt_4: str = discord.Option(description="4番目の選択肢を書いてね", required=False),
-    opt_5: str = discord.Option(description="5番目の選択肢を書いてね", required=False),
-    opt_6: str = discord.Option(description="6番目の選択肢を書いてね", required=False),
-    opt_7: str = discord.Option(description="7番目の選択肢を書いてね", required=False),
-    opt_8: str = discord.Option(description="8番目の選択肢を書いてね", required=False),
-    opt_9: str = discord.Option(description="9番目の選択肢を書いてね", required=False),
-    opt_10: str = discord.Option(description="10番目の選択肢を書いてね", required=False)
+    question: discord.Option(description="質問を書いてね"),
+    opt_1: discord.Option(str,description="1番目の選択肢を書いてね"),
+    opt_2: discord.Option(str,description="2番目の選択肢を書いてね", required=False),
+    opt_3: discord.Option(str,description="3番目の選択肢を書いてね", required=False),
+    opt_4: discord.Option(str,description="4番目の選択肢を書いてね", required=False),
+    opt_5: discord.Option(str,description="5番目の選択肢を書いてね", required=False),
+    opt_6: discord.Option(str,description="6番目の選択肢を書いてね", required=False),
+    opt_7: discord.Option(str,description="7番目の選択肢を書いてね", required=False),
+    opt_8: discord.Option(str,description="8番目の選択肢を書いてね", required=False),
+    opt_9: discord.Option(str,description="9番目の選択肢を書いてね", required=False),
+    opt_10: discord.Option(str,description="10番目の選択肢を書いてね", required=False)
 ): 
 
     # 選択肢をリストに格納
@@ -1360,12 +1360,12 @@ async def export_members(interaction: discord.Interaction):
 # OCR関係
 #---------------
 #=====/table_ocr コマンド=====
-@clean_slash_options
 @bot.slash_command(name="table_ocr", description="表の画像からCSVを作成するよ")
+@clean_slash_options
 async def table_ocr(
     interaction: discord.Interaction,
-    counts: str = discord.Option(description="時間指定(分)", required=False),
-    minutes: str = discord.Option(description="件数指定(件)", required=False)
+    counts: discord.Option(str, description="時間指定(分)", required=False),
+    minutes: discord.Option(str, description="件数指定(件)", required=False)
 ):
     await interaction.response.defer()
 
