@@ -111,14 +111,10 @@ print(f"dict make_list_channels: {make_list_channels}")
 def clean_slash_options(func):
     @wraps(func)
     async def wrapper(interaction, *args, **kwargs):
-        print("[run wrapper]")
-        print(f"args: {args}\nkwargs: {kwargs}")
-        cleaned = {
-            k: (None if isinstance(v, discord.Option) else v)
-            for k, v in kwargs.items()
-        }
-        return await func(interaction, **cleaned)
-    wrapper.__signature__ = inspect.signature(func)
+        for key, value in kwargs.items():
+            if isinstance(value, discord.Option):
+                kwargs[key] = None
+        return await func(interaction, *args, **kwargs)
     return wrapper
 
 #---------------
