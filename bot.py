@@ -1377,12 +1377,12 @@ async def table_ocr(
     limit_msg = msgs[0]
 
     # 指定した範囲のメッセージを取得
-    msg_ids = await collect_message(ctx.channel, counts, minutes, start_msg, limit_msg)
+    msg_ids = await collect_message(ctx.interaction.channel, counts, minutes, start_msg, limit_msg)
 
     # メッセージから画像データを取得してリストに格納
     all_contents = []
     for msg_id in msg_ids:
-        contents = await get_image(ctx.channel, msg_id)
+        contents = await get_image(ctx.interaction.channel, msg_id)
         if contents:
             all_contents.extend(contents)
 
