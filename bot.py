@@ -416,7 +416,7 @@ async def make_vote_result(interaction, msg_id):
         # リアクション投票分
         # リアクションしたユーザーがbotでなければリストに追加
         reaction_users = [reaction_user async for reaction_user in reaction.users() if reaction_user != bot.user]
-        users = [user.nick or user.display_name for user in reaction_users]
+        users = [user.display_name for user in reaction_users]
         
         # 代理投票分
         if msg_id in proxy_votes:
@@ -435,7 +435,7 @@ async def make_vote_result(interaction, msg_id):
                             except:
                                 agent = None
                         if agent:
-                            agent_display_name = agent.nick or agent.display_name
+                            agent_display_name = agent.display_name
                         else:
                             agent_display_name = "Unknown"
             
