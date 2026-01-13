@@ -2,7 +2,6 @@
 # ライブラリのインポート
 #=========================
 import discord
-from discord import app_commands
 from discord.ext import commands
 from discord.ui import View, Select
 import asyncio
@@ -15,17 +14,25 @@ import csv, io
 from google.cloud import vision
 from google.oauth2 import service_account
 import aiohttp
+import requests
+from functools import wraps
+import inspect
 
-# Botの準備
+#=====Botの準備=====
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# サービスアカウントキーの読込
+#=====サービスアカウントキーの読込=====
+#---Vision API---
 info = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
 credentials = service_account.Credentials.from_service_account_info(info)
 client = vision.ImageAnnotatorClient(credentials=credentials)
+
+#---Watson STT---
+WATSON_STT_API_KEY = os.getenv("WATSON_STT_API_KEY")
+WATSON_STT_URL = os.getenv("WATSON_STT_URL")
 
 #===================================
 # 定数・グローバル変数・辞書の準備
@@ -48,10 +55,14 @@ def load_data(data):
 #=====各辞書読込前処理=====
 #---リマインダー辞書---
 data_raw = load_data("reminders")
-if data_raw:
-    reminders = {datetime.fromisoformat(key): value for key, value in data_raw.items()}
-else:
+try:
+    if data_raw:
+        reminders = {datetime.fromisoformat(key): value for key, value in data_raw.items()}
+    else:
+        reminders = {}
+except:
     reminders = {}
+    
 print(f"dict reminders: {reminders}")
 
 #---投票辞書---
@@ -64,14 +75,18 @@ print(f"dict votes: {votes}")
 
 #---代理投票辞書---
 data_raw = load_data("proxy_votes")
-if data_raw:
-    msg_id, values = next(iter(data_raw.items()))
-    if "option" in values:
-        proxy_votes = {}
+try:
+    if data_raw:
+        msg_id, values = next(iter(data_raw.items()))
+        if "option" in values:
+            proxy_votes = {}
+        else:
+            proxy_votes = {int(key): value for key, value in data_raw.items()}
     else:
-        proxy_votes = {int(key): value for key, value in data_raw.items()}
-else:
+        proxy_votes = {}
+except:
     proxy_votes = {}
+    
 print(f"dict proxy_votes: {proxy_votes}")
 
 #---リスト化対象チャンネル辞書---
@@ -81,16 +96,27 @@ try:
         make_list_channels = {key: value for key, value in data_raw.items()}
     else:
         make_list_channels = {"channels": []}
-        print(f"make_list_channels: {make_list_channels}")
 except:
     make_list_channels = {"channels": []}
-    print(f"make_list_channels: {make_list_channels}")
 
 print(f"dict make_list_channels: {make_list_channels}")
 
 #===============
 # 共通処理関数
 #===============
+#---------------
+# デコレーター
+#---------------
+#=====スラッシュコマンドの引数整理=====
+def clean_slash_options(func):
+    @wraps(func)
+    async def wrapper(ctx, *args, **kwargs):
+        for key, value in kwargs.items():
+            if isinstance(value, discord.Option):
+                kwargs[key] = None
+        return await func(ctx, *args, **kwargs)
+    return wrapper
+
 #---------------
 # 辞書関係
 #---------------
@@ -243,6 +269,9 @@ def cancel_proxy_vote(msg_id, voter, agent_id):
             else:
                 print(f"キャンセル対象の代理投票がありません")
                 return None
+    else:
+        print(f"キャンセル対象の代理投票がありません")
+        return None
 
 #---リスト化対象チャンネル---
 def remove_make_list_channel(channel_id, channel_name):
@@ -357,21 +386,6 @@ def reaction_replace(options, reactions):
 
     return options, reactions
 
-#=====メンションの解決=====
-async def resolve_mention(guild, user):
-    if isinstance(user, discord.Member):
-        return user.mention
-    
-    try:
-        member = guild.get_member(user.id)
-        if member:
-            return member.mention
-        else:
-            member = await guild.fetch_member(user.id)
-            return member.mention
-    except:
-        return f"<@{user.id}>"
-
 #=====投票選択肢embed作成=====
 def make_embed_text(options, reactions, question, description):
     for i, opt in enumerate(options):
@@ -421,11 +435,11 @@ async def make_vote_result(interaction, msg_id):
                             except:
                                 agent = None
                         if agent:
-                            agent_display_name = agent.display_name
+                            agent_display_name = agent.nick or agent.display_name
                         else:
                             agent_display_name = "Unknown"
-            
-                        users.append(f"{voter}(by{agent_display_name})")
+
+                        users.append(f"{voter}(by:{agent_display_name})")
 
         if options:
             result[i] = {
@@ -974,7 +988,7 @@ class VoteOptionSelect(View):
         
         add_proxy_vote(self.msg_id, self.voter, self.agent_id, opt_idx)
         agent = guild.get_member(self.agent_id)
-        agent_display_name = agent.display_name
+        agent_display_name = agent.nick or agent.global_name
         await interaction.message.edit(content=f"**{agent_display_name}** から **{self.voter}** の分の投票を受け付けたよ🫡")
 
 #=====追加選択肢入力=====
@@ -990,7 +1004,7 @@ class AddOptionInput(discord.ui.Modal):
         # ModalUIの定義
         self.inputs = []
         for i in range(self.lim):
-            text = discord.ui.TextInput(
+            text = discord.ui.InputText(
                 label=f"選択肢{i+1}",
                 required=(i == 0)
             )
@@ -998,7 +1012,7 @@ class AddOptionInput(discord.ui.Modal):
             self.add_item(text)
 
     # 選択肢入力後の処理
-    async def on_submit(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction):
         print("[start: on submit]")
         await interaction.response.defer()
         await interaction.message.edit(content=f"{bot.user.display_name}が考え中…🤔", view=None)
@@ -1042,15 +1056,31 @@ class VoteSelectMode(Enum):
     ADD_OPTION = "add_option"
     DELETE_VOTE = "delete_vote"
 
+#===============
+# STT関係
+#===============
+#=====録音=====
+class OpusRecorder:
+    # クラスの初期設定
+    def __init__(self, *args, **kwargs):
+        self.data = bytearray()
+
+    # 録音開始時
+    def write(self, data, filename):
+        self.data.extend(data)
+        self.filename = filename
+
+    # 録音終了時
+    def get_opus(self):
+        return bytes(self.data)
+
 #====================
 # イベントハンドラ
 #====================
 # Bot起動時処理
 @bot.event
 async def on_ready():
-    synced = await bot.tree.sync()
     print(f"Botを起動: {bot.user}")
-    print(f"同期されたコマンド: {[cmd.name for cmd in synced]}")
     
     # リマインダーループの開始
     print(f"ループ開始: {datetime.now(JST)}")
@@ -1080,28 +1110,25 @@ async def on_message(message):
 # リマインダー関係
 #---------------
 #=====/remind コマンド=====
-@bot.tree.command(name="remind", description="リマインダーをセットするよ")
-@app_commands.describe(
-    date="日付(yyyy/mm/dd)",
-    time="時刻(hh:mm)",
-    channel="通知するチャンネル",
-    repeat="繰り返し単位",
-    interval="繰り返し間隔",
-    msg="内容"
-)
-@app_commands.choices(repeat=[
-    app_commands.Choice(name="日", value="day"),
-    app_commands.Choice(name="時間", value="hour"),
-    app_commands.Choice(name="分", value="minute")
-])
+@bot.slash_command(name="remind", description="リマインダーをセットするよ")
+@clean_slash_options
 async def remind(
-    interaction: discord.Interaction,
-    date: str,
-    time: str,
-    msg: str,
-    channel: discord.TextChannel = None,
-    repeat: str = None,
-    interval: int = 0):
+    ctx: discord.ApplicationContext,
+    date: discord.Option(str, description="日付(yyyy/mm/dd)"),
+    time: discord.Option(str, description="時刻(hh:mm)"),
+    msg: discord.Option(str, description="内容"),
+    channel: discord.Option(discord.TextChannel, description="通知するチャンネル", required=False),
+    repeat: discord.Option(str, description="繰り返し単位", 
+        choices=[
+            discord.OptionChoice(name="日", value="day"),
+            discord.OptionChoice(name="時間", value="hour"),
+            discord.OptionChoice(name="分", value="minute")
+        ],
+        required=False
+    ),
+    interval: discord.Option(int, description="繰り返し間隔", default=0)
+):
+    print(f"channel: {channel}")
     # 文字列引数からdatatime型に変換
     dt = datetime.strptime(f"{date} {time}", "%Y/%m/%d %H:%M").replace(tzinfo=JST)
 
@@ -1109,24 +1136,24 @@ async def remind(
     if channel:
         channel_id = channel.id
     else:
-        channel_id = interaction.channel.id
+        channel_id = ctx.channel.id
     
     # 過去時刻チェック
     if dt < datetime.now(JST):
-        await interaction.response.send_message("️⚠️設定時刻が過去の日時だよ", ephemeral=True)
+        await ctx.interaction.response.send_message("️⚠️設定時刻が過去の日時だよ", ephemeral=True)
         return
     
     # add_reminder関数に渡す
     add_reminder(dt, repeat, interval, channel_id, msg)
 
-    await interaction.response.send_message(
+    await ctx.interaction.response.send_message(
         content=f"**{dt.strftime('%Y/%m/%d %H:%M')}** にリマインダーをセットしたよ🫡",
         ephemeral=True)
     print(f"予定を追加: {reminders[dt]}")
 
 #=====/reminder_list コマンド=====
-@bot.tree.command(name="reminder_list", description="リマインダーの一覧を表示するよ")
-async def reminder_list(interaction: discord.Interaction):
+@bot.slash_command(name="reminder_list", description="リマインダーの一覧を表示するよ")
+async def reminder_list(ctx: discord.ApplicationContext):
     # 空のリストを作成
     items = []
 
@@ -1147,45 +1174,45 @@ async def reminder_list(interaction: discord.Interaction):
         embed = discord.Embed(title="リマインダー一覧", color=discord.Color.blue())
         for dt_txt, mention, msg in items:
             embed.add_field(name=dt_txt, value=f"{mention} - {msg}", inline=False)
-        await interaction.response.send_message(embed=embed)
+        await ctx.interaction.response.send_message(embed=embed)
     # リマインダーが設定されていない場合のメッセージ
     else:
-        await interaction.response.send_message("⚠️設定されているリマインダーがないよ", ephemeral=True)
+        await ctx.interaction.response.send_message("⚠️設定されているリマインダーがないよ", ephemeral=True)
 
 #=====/reminder_delete コマンド=====
-@bot.tree.command(name="reminder_delete", description="リマインダーを削除するよ")
-async def reminder_delete(interaction: discord.Interaction):
+@bot.slash_command(name="reminder_delete", description="リマインダーを削除するよ")
+async def reminder_delete(ctx: discord.ApplicationContext):
     # リマインダーが設定されている場合、選択メニューを表示
     if reminders:
         view = ReminderSelect(reminders)
-        await interaction.response.send_message("削除するリマインダーを選んでね", view=view)
+        await ctx.interaction.response.send_message("削除するリマインダーを選んでね", view=view)
     # リマインダーが設定されていない場合のメッセージ
     else:
-        await interaction.response.send_message("⚠️設定されているリマインダーがないよ", ephemeral=True)
+        await ctx.interaction.response.send_message("⚠️設定されているリマインダーがないよ", ephemeral=True)
 
 #---------------
 # 投票関係
 #---------------
 #=====/vote コマンド=====
-@bot.tree.command(name="vote", description="投票を作成するよ")
-@app_commands.describe(
-    question="質問を書いてね",
-    opt_1="1番目の選択肢を書いてね",
-    opt_2="2番目の選択肢を書いてね",
-    opt_3="3番目の選択肢を書いてね",
-    opt_4="4番目の選択肢を書いてね",
-    opt_5="5番目の選択肢を書いてね",
-    opt_6="6番目の選択肢を書いてね",
-    opt_7="7番目の選択肢を書いてね",
-    opt_8="8番目の選択肢を書いてね",
-    opt_9="9番目の選択肢を書いてね",
-    opt_10="10番目の選択肢を書いてね",
-)
-async def vote(interaction: discord.Interaction,
-     question: str, opt_1: str, opt_2: str=None, opt_3: str=None, opt_4: str=None, opt_5: str=None,
-     opt_6: str=None, opt_7: str=None, opt_8: str=None, opt_9: str=None, opt_10: str=None): 
+@bot.slash_command(name="vote", description="投票を作成するよ")
+@clean_slash_options
+async def vote(ctx: discord.ApplicationContext,
+    question: discord.Option(description="質問を書いてね"),
+    opt_1: discord.Option(str,description="1番目の選択肢を書いてね"),
+    opt_2: discord.Option(str,description="2番目の選択肢を書いてね", required=False),
+    opt_3: discord.Option(str,description="3番目の選択肢を書いてね", required=False),
+    opt_4: discord.Option(str,description="4番目の選択肢を書いてね", required=False),
+    opt_5: discord.Option(str,description="5番目の選択肢を書いてね", required=False),
+    opt_6: discord.Option(str,description="6番目の選択肢を書いてね", required=False),
+    opt_7: discord.Option(str,description="7番目の選択肢を書いてね", required=False),
+    opt_8: discord.Option(str,description="8番目の選択肢を書いてね", required=False),
+    opt_9: discord.Option(str,description="9番目の選択肢を書いてね", required=False),
+    opt_10: discord.Option(str,description="10番目の選択肢を書いてね", required=False)
+): 
+
     # 選択肢をリストに格納
-    opts = [opt_1, opt_2, opt_3, opt_4, opt_5, opt_6, opt_7, opt_8, opt_9, opt_10]
+    raw_opts = [opt_1, opt_2, opt_3, opt_4, opt_5, opt_6, opt_7, opt_8, opt_9, opt_10]
+    opts = [opt for opt in raw_opts if not isinstance(opt, discord.Option)]
     options = [opt for opt in opts if opt and opt.strip()]
     # リアクションリスト
     reacts = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
@@ -1197,10 +1224,10 @@ async def vote(interaction: discord.Interaction,
 
     # Embedで出力
     embed = make_embed_text(options, reactions, question, description)
-    await interaction.response.send_message(embed=embed)
+    await ctx.interaction.response.send_message(embed=embed)
     
     # リアクションを追加
-    message = await interaction.original_response()
+    message = await ctx.interaction.original_response()
     for i in range(len(options)):
         await message.add_reaction(reactions[i])
     
@@ -1208,58 +1235,59 @@ async def vote(interaction: discord.Interaction,
     add_vote(message.id, question, reactions, options)
 
 #=====/vote_add_option コマンド=====
-@bot.tree.command(name="vote_add_option", description="投票に選択肢を追加するよ")
-async def vote_add_option(interaction: discord.Interaction):
+@bot.slash_command(name="vote_add_option", description="投票に選択肢を追加するよ")
+async def vote_add_option(ctx: discord.ApplicationContext):
     if votes:
         view = VoteSelect(mode=VoteSelectMode.ADD_OPTION, voter=None, agent_id=None)
-        await interaction.response.send_message("選択肢を追加する投票を選んでね", view=view)
+        await ctx.interaction.response.send_message("選択肢を追加する投票を選んでね", view=view)
     # 投票がない場合のメッセージ
     else:
-        await interaction.response.send_message("⚠️実施中の投票がないよ", ephemeral=True)
+        await ctx.interaction.response.send_message("⚠️実施中の投票がないよ", ephemeral=True)
 
 #=====/vote_result コマンド=====
-@bot.tree.command(name="vote_result", description="投票結果を表示するよ")
-@app_commands.describe(mode="集計モード")
-@app_commands.choices(mode=[
-    app_commands.Choice(name="中間集計", value="mid"),
-    app_commands.Choice(name="最終結果", value="final")
-])
-async def vote_result(interaction: discord.Interaction, mode: str):
+@bot.slash_command(name="vote_result", description="投票結果を表示するよ")
+async def vote_result(
+    ctx: discord.ApplicationContext,
+    mode: str = discord.Option(description="集計モード",
+        choices = [
+            discord.OptionChoice(name="中間集計", value="mid"),
+            discord.OptionChoice(name="最終結果", value="final")
+        ]
+    )
+):
     if votes:
         if mode == "mid":
             view = VoteSelect(mode=VoteSelectMode.MID_RESULT, voter=None, agent_id=None)
-            await interaction.response.send_message("どの投票結果を表示するか選んでね", view=view)
+            await ctx.interaction.response.send_message("どの投票結果を表示するか選んでね", view=view)
         elif mode == "final":
             view = VoteSelect(mode=VoteSelectMode.FINAL_RESULT, voter=None, agent_id=None)
-            await interaction.response.send_message("どの投票結果を表示するか選んでね", view=view)
+            await ctx.interaction.response.send_message("どの投票結果を表示するか選んでね", view=view)
         else:
-            await interaction.response.send_message("⚠️選択モードの指定がまちがってるよ", ephemeral=True)
+            await ctx.interaction.response.send_message("⚠️選択モードの指定がまちがってるよ", ephemeral=True)
 
     # 投票がない場合のメッセージ
     else:
-        await interaction.response.send_message("⚠️集計できる投票がないよ", ephemeral=True)
+        await ctx.interaction.response.send_message("⚠️集計できる投票がないよ", ephemeral=True)
 
 #=====/proxy_vote コマンド=====
-@bot.tree.command(name="proxy_vote", description="本人の代わりに代理投票するよ")
-@app_commands.describe(voter = "投票する本人の名前を書いてね")
-async def proxy_vote(interaction: discord.Interaction, voter: str):
+@bot.slash_command(name="proxy_vote", description="本人の代わりに代理投票するよ")
+async def proxy_vote(ctx: discord.ApplicationContext, voter: str = discord.Option(description="投票する本人の名前を書いてね")):
     if votes:
-        agent_id = interaction.user.id
+        agent_id = ctx.interaction.user.id
         view = VoteSelect(mode=VoteSelectMode.PROXY_VOTE, voter=voter, agent_id=agent_id)
-        await interaction.response.send_message("どの投票に代理投票するか選んでね", view=view)
+        await ctx.interaction.response.send_message("どの投票に代理投票するか選んでね", view=view)
     else:
-        await interaction.response.send_message("⚠️代理投票できる投票がないよ", ephemeral=True)
+        await ctx.interaction.response.send_message("⚠️代理投票できる投票がないよ", ephemeral=True)
 
 #=====/cancel_proxy コマンド=====
-@bot.tree.command(name="cancel_proxy", description="投票済みの代理投票を取り消すよ")
-@app_commands.describe(voter = "投票者名")
-async def cancel_proxy(interaction: discord.Interaction, voter: str):
+@bot.slash_command(name="cancel_proxy", description="投票済みの代理投票を取り消すよ")
+async def cancel_proxy(ctx: discord.ApplicationContext, voter: str = discord.Option(description="投票者名")):
     if votes:
-        agent_id = interaction.user.id
+        agent_id = ctx.interaction.user.id
         view = VoteSelect(mode=VoteSelectMode.CANCEL_PROXY_VOTE, voter=voter, agent_id=agent_id)
-        await interaction.response.send_message("代理投票を取り消しする投票を選んでね", view=view)
+        await ctx.interaction.response.send_message("代理投票を取り消しする投票を選んでね", view=view)
     else:
-        await interaction.response.send_message("⚠️取り消しできる投票がないよ", ephemeral=True)
+        await ctx.interaction.response.send_message("⚠️取り消しできる投票がないよ", ephemeral=True)
 
 #=====!delete_vote コマンド====
 @bot.command()
@@ -1269,33 +1297,33 @@ async def delete_vote(ctx):
         await ctx.message.delete()
         await ctx.send("どの投票を削除するか選んでね", view=view)
     else:
-        await ctx.send("⚠️取り消しできる投票がないよ", ephemeral=True)
+        await ctx.send("⚠️取り消しできる投票がないよ")
 
 #=====context_reaction_count コマンド=====
-@bot.tree.context_menu(name="context_reaction_count")
-async def context_reaction_count(interaction: discord.Interaction, message: discord.Message):
+@bot.message_command(name="context_reaction_count")
+async def context_reaction_count(ctx: discord.ApplicationContext, message: discord.Message):
     if not message.reactions:
-        await interaction.response.send_message(content="️⚠️リアクションがついてないよ", ephemeral=True)
+        await ctx.interaction.response.send_message(content="️⚠️リアクションがついてないよ", ephemeral=True)
         return
 
-    await interaction.response.defer()
+    await ctx.interaction.response.defer()
     print(message)
     msg_id = message.id
     
-    dt, result = await make_vote_result(interaction, msg_id)
+    dt, result = await make_vote_result(ctx, msg_id)
     # 結果表示処理
-    await show_vote_result(interaction, dt, result, msg_id, "mid")
+    await show_vote_result(ctx, dt, result, msg_id, "mid")
     # CSV作成処理
-    await export_vote_csv(interaction, result, msg_id, dt, "mid")
+    await export_vote_csv(ctx, result, msg_id, dt, "mid")
 
 #---------------
 # メンバーリスト関係
 #---------------
 #=====/export_members コマンド=====
-@bot.tree.command(name="export_members", description="サーバーのメンバーリストを出力するよ")
-async def export_members(interaction: discord.Interaction):
-    await interaction.response.defer()
-    guild = interaction.guild
+@bot.slash_command(name="export_members", description="サーバーのメンバーリストを出力するよ")
+async def export_members(ctx: discord.ApplicationContext):
+    await ctx.interaction.response.defer()
+    guild = ctx.interaction.guild
     
     filename = f"/tmp/members_list_{datetime.now(JST).strftime('%Y%m%d_%H%M')}.csv"
     meta = {
@@ -1303,12 +1331,12 @@ async def export_members(interaction: discord.Interaction):
         "collected_at": datetime.now(JST).strftime("%Y/%m/%d %H:%M")
     }
     header = ["user_id", "user_name", "display_name", "is_bot"]
-    rows = [[member.id, member.name, member.display_name, member.bot] async for member in guild.fetch_members(limit=None)]
+    rows = [[member.id, member.name, member.nick or member.global_name, member.bot] async for member in guild.fetch_members(limit=None)]
     
     make_csv(filename, rows, meta, header)
     
     # discordに送信
-    await interaction.followup.send(
+    await ctx.interaction.followup.send(
         content="メンバー一覧のCSVだよ🫡",
         file=discord.File(filename)
     )
@@ -1317,25 +1345,29 @@ async def export_members(interaction: discord.Interaction):
 # OCR関係
 #---------------
 #=====/table_ocr コマンド=====
-@bot.tree.command(name="table_ocr", description="表の画像からCSVを作成するよ")
-@app_commands.describe(minutes = "時間指定(分)", counts = "件数指定(件)")
-async def table_ocr(interaction: discord.Interaction, counts: str = None, minutes: str = None):
-    await interaction.response.defer()
+@bot.slash_command(name="table_ocr", description="表の画像からCSVを作成するよ")
+@clean_slash_options
+async def table_ocr(
+    ctx: discord.ApplicationContext,
+    counts: discord.Option(str, description="時間指定(分)", required=False),
+    minutes: discord.Option(str, description="件数指定(件)", required=False)
+):
+    await ctx.interaction.response.defer()
 
     # チャンネルの最新メッセージを取得
-    start_msg_id = interaction.channel.last_message_id
-    start_msg = await interaction.channel.fetch_message(start_msg_id)
+    start_msg_id = ctx.interaction.channel.last_message_id
+    start_msg = await ctx.interaction.channel.fetch_message(start_msg_id)
     # チャンネルの一番古いメッセージを取得
-    msgs = [msg async for msg in interaction.channel.history(limit=1, oldest_first=True)]
+    msgs = [msg async for msg in ctx.interaction.channel.history(limit=1, oldest_first=True)]
     limit_msg = msgs[0]
 
     # 指定した範囲のメッセージを取得
-    msg_ids = await collect_message(interaction.channel, counts, minutes, start_msg, limit_msg)
+    msg_ids = await collect_message(ctx.interaction.channel, counts, minutes, start_msg, limit_msg)
 
     # メッセージから画像データを取得してリストに格納
     all_contents = []
     for msg_id in msg_ids:
-        contents = await get_image(interaction.channel, msg_id)
+        contents = await get_image(ctx.interaction.channel, msg_id)
         if contents:
             all_contents.extend(contents)
 
@@ -1353,20 +1385,20 @@ async def table_ocr(interaction: discord.Interaction, counts: str = None, minute
     make_csv(filename, rows)
     
     # CSVを出力
-    await interaction.followup.send(
+    await ctx.interaction.followup.send(
         content="OCR結果のCSVだよ🫡",
         file=discord.File(filename)
     )
 
 #=====context_ocr コマンド=====
-@bot.tree.context_menu(name="context_ocr")
-async def context_ocr(interaction: discord.Interaction, message: discord.Message):
+@bot.message_command(name="context_ocr")
+async def context_ocr(ctx: discord.ApplicationContext, message: discord.Message):
 
     if not message.attachments:
-        await interaction.response.send_message(content="⚠️画像が添付されてないよ", ephemeral=True)
+        await ctx.interaction.response.send_message(content="⚠️画像が添付されてないよ", ephemeral=True)
         return
 
-    await interaction.response.defer()
+    await ctx.interaction.response.defer()
 
     # 画像ごとにOCR処理を実行してtemp_rowsに格納
     temp_rows = []
@@ -1376,7 +1408,7 @@ async def context_ocr(interaction: discord.Interaction, message: discord.Message
                 content = await resp.read()
     
         # visionからテキストを受け取ってCSV用に整形
-        temp_rows.extend(extract_table_from_image(content))
+        temp_rows.extend(await extract_table_from_image(content))
     print(f"temp_rows:{temp_rows}")
     # 重複行を削除
     rows = remove_duplicate_rows(temp_rows)
@@ -1387,7 +1419,7 @@ async def context_ocr(interaction: discord.Interaction, message: discord.Message
     make_csv(filename, rows)
     
     # CSVを出力
-    await interaction.followup.send(
+    await ctx.interaction.followup.send(
         content="OCR結果のCSVだよ🫡",
         file=discord.File(filename)
     )
@@ -1395,25 +1427,27 @@ async def context_ocr(interaction: discord.Interaction, message: discord.Message
 #---------------
 # リスト化関係
 #---------------
+#=====add_listed_ch コマンド=====
 @bot.command()
 async def add_listed_ch(ctx):
+    # コマンド実行チャンネルを取得
     channel_id = ctx.channel.id
-    print(f"channel_id: {channel_id}")
     channel_name = ctx.channel.name
-    print(f"channel_name: {channel_name}")
-    
+
+    # リスト化対象チャンネル辞書に登録
     add_make_list_channel(channel_id)
     
     await ctx.message.delete()
     await ctx.send(f"{channel_name}をリスト化対象にしたよ🫡\n今後は改行ごとに別の項目としてリスト化されるよ\nリストから削除する場合は、ロングタップ(PCの場合は右クリック)して、アプリ→**remove_from_list**で削除できるよ\n---")
 
+#=====remove_listed_ch コマンド=====
 @bot.command()
 async def remove_listed_ch(ctx):
+    # コマンド実行チャンネルを取得
     channel_id = ctx.channel.id
-    print(f"channel_id: {channel_id}")
     channel_name = ctx.channel.name
-    print(f"channel_name: {channel_name}")
-    
+
+    # リスト化対象チャンネル辞書から削除
     remove_ch = remove_make_list_channel(channel_id, channel_name)
     
     if remove_ch:
@@ -1421,15 +1455,98 @@ async def remove_listed_ch(ctx):
         await ctx.send(f"{channel_name}をリスト化対象から削除したよ🫡")
     else:
         await ctx.message.delete()
-        await ctx.send(content=f"⚠️{channel_name}はリスト化対象ではないよ", ephemeral=True)
+        await ctx.send(content=f"⚠️{channel_name}はリスト化対象ではないよ")
 
-@bot.tree.context_menu(name="remove_from_list")
-async def remove_from_list(interaction: discord.Interaction, message: discord.Message):
+#=====remove_from_list コマンド=====
+@bot.message_command(name="remove_from_list")
+async def remove_from_list(ctx: discord.ApplicationContext, message: discord.Message):
+    # リスト化対象チャンネル内なら項目を削除
     if message.channel.id in make_list_channels["channels"]:
         await message.delete()
-        await interaction.response.send_message(content=f"{message.content}を削除したよ🫡", ephemeral=True)
+        await ctx.interaction.response.send_message(content=f"{message.content}を削除したよ🫡", ephemeral=True)
+    # リスト化対象チャンネル以外ならエラーを返す
     else:
-        await interaction.response.send_message(content=f"️⚠️リストの項目以外は削除できないよ", ephemeral=True)
+        await ctx.interaction.response.send_message(content=f"️⚠️リストの項目以外は削除できないよ", ephemeral=True)
+
+#====================
+# STT関係
+#====================
+#=====join コマンド=====
+@bot.command(name="join")
+async def join(ctx):
+    # コマンド実行者がvc参加中の場合
+    if ctx.author.voice:
+        # botが既にvc参加していればエラーメッセージを返す
+        if ctx.voice_client:
+            await ctx.message.delete()
+            await ctx.send("⚠️すでにボイスチャンネルに接続してるよ")
+        # そうでなければコマンド実行者が参加中のvcに接続する
+        else:
+            channel = ctx.author.voice.channel
+            await ctx.message.delete()
+            await channel.connect()
+            await ctx.send(f"{channel.name}に接続したよ🫡")
+    # コマンド実行者がvc参加していなければエラーメッセージを返す
+    else:
+        await ctx.message.delete()
+        await ctx.send("⚠️先にボイスチャンネルに参加してね")
+
+#=====recstart コマンド=====
+@bot.command(name="recstart")
+async def recstart(ctx):
+    vc = ctx.voice_client
+    # botがvcに参加している場合
+    if vc:
+        # ファイル名を作成
+        ts = datetime.now(JST).strftime("%Y%m%d_%H%M")
+        filename = f"/tmp/vc_{ts}.opus"
+        vc.recording_file = filename
+        
+        # 録音開始
+        recorder = OpusRecorder(filename)
+        vc.listen(recorder)
+
+        await ctx.message.delete()
+        await ctx.send("⏺録音を開始したよ🫡")
+
+    else:
+        await ctx.message.delete()
+        await ctx.send("⚠️先に`!join`を実行してね")
+
+#=====recstop コマンド=====
+@bot.command(name="recstop")
+async def recstop(ctx):
+    vc = ctx.voice_client
+    # botがvcに参加している場合
+    if vc:
+        vc.stop_listening()
+        filename = OpusRecorder.filename
+        
+        if filename:
+            # 録音データが存在する場合、Watson APIに渡すデータを作成
+            await ctx.send("⏹録音停止！文字起こしを始めるよ🫡")
+            with open(filename, "rb") as f:
+                audio = f.read()
+            headers = {"Content-Type": "audio/ogg"}
+            auth = ("apikey", WATSON_STT_API_KEY)
+    
+            # Watson APIにデータを渡してjsonファイルを受け取る
+            response = requests.post(
+                WATSON_STT_URL,
+                headers=headers,
+                data=audio,
+                auth=auth
+            )
+
+            # jsonファイルをテキスト化
+            result = response.json()
+            text = result.get("results", [{}])[0].get("alternatives", [{}])[0].get("transcript", "")
+            # テキストファイルを保存
+            filename = filename.replace("opus", "txt")
+            with open(filename, "w", encoding="utf-8-sig") as f:
+                f.write(text)
+            
+            await ctx.send(f"文字起こしが終わったよ🫡",file=discord.File(filename))
 
 # Botを起動
 bot.run(os.getenv("DISCORD_TOKEN"))
