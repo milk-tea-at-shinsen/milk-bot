@@ -1504,7 +1504,12 @@ async def recstart(ctx):
         # 録音開始
         recorder = OpusRecorder(filename)
         vc.recorder = recorder
-        vc.listen(recorder)
+
+        await vc.start_recording(
+            recorder,
+            lambda *args: None,
+            ctx
+        )
 
         await ctx.message.delete()
         await ctx.send("⏺録音を開始したよ🫡")
@@ -1519,7 +1524,7 @@ async def recstop(ctx):
     vc = ctx.voice_client
     # botがvcに参加している場合
     if vc:
-        vc.stop_listening()
+        vc.stop_recording()
         filename = vc.recorder.filename
         
         if filename:
