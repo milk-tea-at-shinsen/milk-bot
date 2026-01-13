@@ -425,30 +425,17 @@ async def make_vote_result(interaction, msg_id):
                 for opt_idx in values["opt_idx"]:
                     if opt_idx == i:
                         agent_id = values["agent_id"]
-                        # 代理人のidから代理人のmemberを検索
-                        agent_member = guild.get_member(agent_id)
+                        # 代理人のidから代理人を検索
+                        agent = guild.get_member(agent_id)
                         # 代理人が最近のキャッシュに見つからなければサーバー情報から検索
-                        if agent_member is None:
+                        if agent is None:
                             try:
-                                agent_member = await guild.fetch_member(agent_id)
+                                agent = await guild.fetch_member(agent_id)
                             # それでも見つからない場合はNoneを表示
                             except:
-                                agent_member = None
-                        # 代理人のidから代理人のuserを検索
-                        agent_user = bot.get_user(agent_id)
-                        # 代理人が最近のキャッシュに見つからなければサーバー情報から検索
-                        if agent_user is None:
-                            try:
-                                agent_user = await guild.fetch_user(agent_id)
-                            # それでも見つからない場合はNoneを表示
-                            except:
-                                agent_user = None
-                        if agent_member or agent_user:
-                            print(f"member: {dir(agent_member)}")
-                            print(f"agent_member:\nname:{agent_member.name}\nnick:{agent_member.nick}\ndisplay_name:{agent_member.display_name}")
-                            print(f"user: {dir(agent_user)}")
-                            print(f"agent_user:\nname:{agent_user.name}\ndisplay_name:{agent_user.display_name}")
-                            agent_display_name = agent_member.nick or agent_user.display_name or agent_member.name
+                                agent = None
+                        if agent:
+                            agent_display_name = agent.nick or agent.display_name
                         else:
                             agent_display_name = "Unknown"
 
@@ -1421,7 +1408,7 @@ async def context_ocr(ctx: discord.ApplicationContext, message: discord.Message)
                 content = await resp.read()
     
         # visionからテキストを受け取ってCSV用に整形
-        temp_rows.extend(extract_table_from_image(content))
+        temp_rows.extend(await extract_table_from_image(content))
     print(f"temp_rows:{temp_rows}")
     # 重複行を削除
     rows = remove_duplicate_rows(temp_rows)
