@@ -23,7 +23,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
-bot_display_name = guild.me.nick or guild.me.global_name
+bot_display_name = guild.me.nick or guild.me.name
 
 #=====サービスアカウントキーの読込=====
 #---Vision API---
