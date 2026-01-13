@@ -16,6 +16,7 @@ from google.oauth2 import service_account
 import aiohttp
 import requests
 from functools import wraps
+import inspect
 
 #=====Botの準備=====
 intents = discord.Intents.default()
@@ -117,6 +118,7 @@ def clean_slash_options(func):
             for k, v in kwargs.items()
         }
         return await func(interaction, **cleaned)
+    wrapper.__signature__ = inspect.signature(func)
     return wrapper
 
 #---------------
