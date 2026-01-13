@@ -53,10 +53,14 @@ def load_data(data):
 #=====各辞書読込前処理=====
 #---リマインダー辞書---
 data_raw = load_data("reminders")
-if data_raw:
-    reminders = {datetime.fromisoformat(key): value for key, value in data_raw.items()}
-else:
+try:
+    if data_raw:
+        reminders = {datetime.fromisoformat(key): value for key, value in data_raw.items()}
+    else:
+        reminders = {}
+except:
     reminders = {}
+    
 print(f"dict reminders: {reminders}")
 
 #---投票辞書---
@@ -69,14 +73,18 @@ print(f"dict votes: {votes}")
 
 #---代理投票辞書---
 data_raw = load_data("proxy_votes")
-if data_raw:
-    msg_id, values = next(iter(data_raw.items()))
-    if "option" in values:
-        proxy_votes = {}
+try:
+    if data_raw:
+        msg_id, values = next(iter(data_raw.items()))
+        if "option" in values:
+            proxy_votes = {}
+        else:
+            proxy_votes = {int(key): value for key, value in data_raw.items()}
     else:
-        proxy_votes = {int(key): value for key, value in data_raw.items()}
-else:
+        proxy_votes = {}
+except:
     proxy_votes = {}
+    
 print(f"dict proxy_votes: {proxy_votes}")
 
 #---リスト化対象チャンネル辞書---
@@ -86,10 +94,8 @@ try:
         make_list_channels = {key: value for key, value in data_raw.items()}
     else:
         make_list_channels = {"channels": []}
-        print(f"make_list_channels: {make_list_channels}")
 except:
     make_list_channels = {"channels": []}
-    print(f"make_list_channels: {make_list_channels}")
 
 print(f"dict make_list_channels: {make_list_channels}")
 
