@@ -435,7 +435,7 @@ async def make_vote_result(interaction, msg_id):
                             except:
                                 agent = None
                         if agent:
-                            agent_display_name = agent.display_name
+                            agent_display_name = agent.nick or agent.global_name or agent.name
                         else:
                             agent_display_name = "Unknown"
             
