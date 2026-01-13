@@ -425,20 +425,29 @@ async def make_vote_result(interaction, msg_id):
                 for opt_idx in values["opt_idx"]:
                     if opt_idx == i:
                         agent_id = values["agent_id"]
-                        # 代理人のidから代理人を検索
-                        agent = guild.get_member(agent_id)
+                        # 代理人のidから代理人のmemberを検索
+                        agent_member = guild.get_member(agent_id)
                         # 代理人が最近のキャッシュに見つからなければサーバー情報から検索
-                        if agent is None:
+                        if agent_member is None:
                             try:
-                                agent = await guild.fetch_member(agent_id)
+                                agent_member = await guild.fetch_member(agent_id)
                             # それでも見つからない場合はNoneを表示
                             except:
-                                agent = None
-                        if agent:
-                            print(f"agent.nick: {agent.nick}")
-                            print(f"agent.user.display_name: {agent.user.display_name}")
-                            print(f"agent.name: {agent.name}")
-                            agent_display_name = agent.nick or agent.user.display_name or agent.name
+                                agent_member = None
+                        # 代理人のidから代理人のuserを検索
+                        agent_user = bot.get_user(agent_id)
+                        # 代理人が最近のキャッシュに見つからなければサーバー情報から検索
+                        if agent_user is None:
+                            try:
+                                agent_user = await guild.fetch_user(agent_id)
+                            # それでも見つからない場合はNoneを表示
+                            except:
+                                agent_user = None
+                        if agent_member or agent_user:
+                            print(f"agent_member.nick: {agent_member.nick}")
+                            print(f"agent_user.display_name: {agent_user.display_name}")
+                            print(f"agent_member.name: {agent_member.name}")
+                            agent_display_name = agent_member.nick or agent_user.display_name or agent_member.name
                         else:
                             agent_display_name = "Unknown"
             
