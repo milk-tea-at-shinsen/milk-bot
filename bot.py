@@ -104,7 +104,7 @@ def clean_slash_options(func):
     async def wrapper(interaction, *args, **kwargs):
         cleaned = {
             k: (None if isinstance(v, discord.Option) else v)
-            for k, v in kwarg.items()
+            for k, v in kwargs.items()
         }
         return await func(interaction, **cleaned)
 
