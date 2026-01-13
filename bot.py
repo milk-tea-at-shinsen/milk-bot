@@ -1531,7 +1531,7 @@ async def recstop(ctx):
             auth = ("apikey", WATSON_STT_API_KEY)
     
             # Watson APIにデータを渡してjsonファイルを受け取る
-            response = await.loop.run_in_exector(
+            response = await loop.run_in_exector(
                 None,
                 lambda: requests.post(
                     WATSON_STT_URL,
