@@ -1125,15 +1125,14 @@ async def on_message(message):
 # リマインダー関係
 #---------------
 #=====/remind コマンド=====
-@clean_slash_options
 @bot.slash_command(name="remind", description="リマインダーをセットするよ")
+@clean_slash_options
 async def remind(
     interaction: discord.Interaction,
-    date: str = discord.Option(description="日付(yyyy/mm/dd)"),
-    time: str = discord.Option(description="時刻(hh:mm)"),
-    msg: str = discord.Option(description="内容"),
-    channel: discord.TextChannel = discord.Option(description="通知するチャンネル", required=False),
-    repeat: str = discord.Option(description="繰り返し単位", 
+    date: discord.Option(str, description="時刻(hh:mm)"),
+    msg: discord.Option(str, description="内容"),
+    channel: discord.Option(discord.TextChannel, description="通知するチャンネル", required=False),
+    repeat: discord.Option(str, description="繰り返し単位", 
         choices=[
             discord.OptionChoice(name="日", value="day"),
             discord.OptionChoice(name="時間", value="hour"),
@@ -1141,7 +1140,7 @@ async def remind(
         ],
         required=False
     ),
-    interval: int = discord.Option(description="繰り返し間隔", default=0)
+    interval: discord.Option(int, description="繰り返し間隔", default=0)
 ):
     print(f"channel: {channel}")
     # 文字列引数からdatatime型に変換
