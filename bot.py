@@ -1125,8 +1125,8 @@ async def on_message(message):
 # リマインダー関係
 #---------------
 #=====/remind コマンド=====
-@bot.slash_command(name="remind", description="リマインダーをセットするよ")
 @clean_slash_options
+@bot.slash_command(name="remind", description="リマインダーをセットするよ")
 async def remind(
     interaction: discord.Interaction,
     date: str = discord.Option(description="日付(yyyy/mm/dd)"),
