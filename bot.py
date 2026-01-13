@@ -113,6 +113,7 @@ def clean_slash_options(func):
             for k, v in kwargs.items()
         }
         return await func(interaction, **cleaned)
+    return wrapper
 
 #---------------
 # 辞書関係
