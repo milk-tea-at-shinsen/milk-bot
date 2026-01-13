@@ -1476,6 +1476,9 @@ async def remove_from_list(ctx: discord.ApplicationContext, message: discord.Mes
 async def join(ctx):
     # コマンド実行者がvc参加中の場合
     if ctx.author.voice:
+        if ctx.voice_client and not ctx.voice_client.is_connected():
+            await ctx.voice_client.disconnect(force=True)
+        
         # botが既にvc参加していればエラーメッセージを返す
         if ctx.voice_client:
             await ctx.message.delete()
