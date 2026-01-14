@@ -850,12 +850,28 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
         
         try:
             audio.file.seek(0)
-            audio_data = audio.file.read()
+            seg = AudioSegment.from_wav(audio.file)
 
-            if len(audio_data) < 100: continue
+            # 1. まず音量を15〜20dBくらいガッツリ下げる（これで「ガチャガチャ」を抑える）
+            # ※音割れした状態で録音されていても、少しマシになります
+            seg = seg - 15
+
+            # 2. その後、適切な音量まで「安全に」引き上げる（正規化）
+            # これで、音が潰れない範囲で最大の音量に調整されます
+            seg = effects.normalize(seg)
+
+            # 3. Watsonが聞き取りやすい周波数（16kHz）とモノラルに変換
+            seg = seg.set_channels(1).set_frame_rate(16000)
+
+            # 加工後のデータをバイナリ化
+            buf = io.BytesIO()
+            seg.export(buf, format="wav")
+            processed_audio_data = buf.read()
+
+            if len(processed_audio_data) < 100: continue
 
             res = stt.recognize(
-                audio=audio_data,
+                audio=processed_audio_data,
                 content_type="audio/wav",
                 model="ja-JP_Multimedia",
                 smart_formatting=True
