@@ -17,6 +17,8 @@ import aiohttp
 import requests
 from functools import wraps
 import inspect
+from ibm_watson import SpeechToTextV1
+from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 
 #=====Botの準備=====
 intents = discord.Intents.default()
