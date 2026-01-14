@@ -1542,9 +1542,9 @@ async def recstart(ctx):
     # コマンド実行者がvc参加中の場合
     if ctx.author.voice:
         # botが既にvc参加していればエラーメッセージを返す
-        if ctx.voice_client and ctx.voice_client.is_connected:
+        if ctx.voice_client and ctx.voice_client.reording:
             await ctx.message.delete()
-            await ctx.send("⚠️すでにボイスチャンネルに接続してるよ")
+            await ctx.send("⚠️いまは録音中だよ")
         # そうでなければコマンド実行者が参加中のvcに接続する
         else:
             channel = ctx.author.voice.channel
