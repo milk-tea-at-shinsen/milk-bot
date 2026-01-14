@@ -842,32 +842,35 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
         
         start_time = getattr(audio, "first_packet", 0)
         
-        try:
+                try:
             audio.file.seek(0)
             raw_data = audio.file.read()
-            if len(raw_data) < 1000: continue # 生データが少なすぎる場合は飛ばす
+            if len(raw_data) < 100: continue
 
-            # --- pydubでの加工処理 ---
+            # 1. pydubで読み込む
             seg = AudioSegment.from_wav(io.BytesIO(raw_data))
-            
-            # 音割れ（ガチャガチャ）がひどい場合、まずは正規化より先に音量を下げる
-            seg = seg - 20 
-            seg = effects.normalize(seg)
-            seg = seg.set_channels(1).set_frame_rate(16000)
 
-            # 加工データをバイナリ化
+            # 2. 加工を最小限にする
+            # 20dBも下げず、5dBくらいに留める。
+            # normalize（正規化）は、音割れがひどい時だけ効くように最後に持ってくる。
+            seg = seg - 5
+            seg = seg.set_channels(1).set_frame_rate(16000)
+            seg = effects.normalize(seg) # 最後に全体のバランスを整える
+
+            # 3. 書き出し
             out_buf = io.BytesIO()
             seg.export(out_buf, format="wav")
             out_buf.seek(0)
             processed_data = out_buf.read()
 
-            # --- ★ここが重要：Watsonに送る前のチェック ---
-            if len(processed_data) < 100:
-                print(f"⚠️ {user_name} の加工後データが空のためスキップします")
+            # データチェック（44バイトはWAVヘッダーのみのサイズ）
+            if len(processed_data) <= 44:
+                print(f"⚠️ {user_name}: データが空です")
                 continue
 
-            print(f"5: Watsonへ送信中... ({user_name}, {len(processed_data)} bytes)")
-            
+            print(f"5: Watson解析リクエスト中... ({user_name})")
+            # --- ここからWatsonのリクエスト ---
+
             res = stt.recognize(
                 audio=processed_data,
                 content_type="audio/wav",
