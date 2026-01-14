@@ -864,13 +864,17 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
             print(f"⚠️{user_name}の音声認識ができなかったよ: {e}")
             continue
     
-    if response and "results" in response:
-            try:
-                # 1文字ずつのリストにならないよう、文字列として取得
-                transcript = response.get("results", [{}])[0].get("alternatives", [{}])[0].get("transcript", "")
-                transcripts.append(f"{user_name}: {transcript.strip()}")
-            except (IndexError, KeyError):
-                print(f"{user_name}の解析結果が空でした。")
+        if response and "results" in response and len(response["results"]) > 0:
+            # 階層を一つずつ安全に辿る
+            first_result = response["results"][0]
+            alternatives = first_result.get("alternatives", [])
+            
+            if alternatives and len(alternatives) > 0:
+                transcript = alternatives[0].get("transcript", "")
+                if transcript.strip():
+                    transcripts.append(f"{user_name}: {transcript.strip()}")
+        else:
+            print(f"{user_name}: ⚠️有効な音声認識がありません")
 
     if transcripts:
         text = "\n".join(transcripts)
