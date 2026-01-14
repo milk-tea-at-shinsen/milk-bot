@@ -897,12 +897,25 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
         # 全ユーザー分送ると大変なので、とりあえず最初の1人分を確認
         for user_id, audio in sink.audio_data.items():
             audio.file.seek(0)
-            # discord.Fileとしてそのまま送信
-            await channel.send(
-                content=f"送られた音声データを確認してみてね（User ID: {user_id}）",
-                file=discord.File(audio.file, filename=f"debug_audio_{user_id}.wav")
-            )
-            break # 1人分だけでOKならbreak
+    
+            # 1. 生データを一度読み込む
+            # PycordのWaveSinkは 48,000Hz / 2ch(ステレオ) / 16-bit PCM が標準です
+            try:
+                segment = AudioSegment.from_wav(audio.file)
+                
+                # 2. 標準的な形式（16kHz、モノラルなど）に整形してバッファに書き出し
+                # これでヘッダーが正しく作り直されます
+                debug_buffer = io.BytesIO()
+                segment.export(debug_buffer, format="wav")
+                debug_buffer.seek(0)
+        
+                # 3. 修正したWAVを送信
+                await channel.send(
+                    content=f"修正版WAV（User ID: {user_id}）",
+                    file=discord.File(debug_buffer, filename=f"fixed_{user_id}.wav")
+                )
+            except Exception as e:
+                print(f"WAV修復失敗: {e}")
 
 #===============
 # クラス定義
@@ -1596,4 +1609,5 @@ async def recstop(ctx):
             await ctx.send("⚠️いまは録音してないよ")
 
 # Botを起動
+
 bot.run(os.getenv("DISCORD_TOKEN"))
