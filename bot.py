@@ -28,6 +28,7 @@ intents.message_content = True
 intents.members = True
 intents.voice_states = True
 bot = commands.Bot(command_prefix="!", intents=intents)
+print(f"Pycord version: {discord.__version__}")
 
 if not discord.opus.is_loaded():
     try:
@@ -847,7 +848,7 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
             audio.file.seek(0)
             audio_data = audio.file.read()
 
-            if len(audio_data) == 0:
+            if not audio_data or len(audio_data) < 100: # 極端に短いデータは無視
                 print(f"{user_name}の音声データが空だよ")
                 continue
 
