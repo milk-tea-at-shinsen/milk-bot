@@ -832,7 +832,7 @@ async def handle_make_list(message):
 #=====録音後処理=====
 async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextChannel, *args):
     print("[start: after_recording]")
-    status_msg = await channel.send("🎙 音声を最適化して解析中...")
+    status_msg = await channel.send("🎙 データを整理してWatsonに送っているよ...")
 
     all_results = []
 
@@ -843,38 +843,29 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
         start_time = getattr(audio, "first_packet", 0)
         
         try:
-            # 1. 生のデータを取得するだけ
+            # 1. データの取り出し
             audio.file.seek(0)
             raw_data = audio.file.read()
             
-            # ログでサイズを確認（ここが44より大きければ、音は存在します）
-            print(f"DEBUG: {user_name} の生データサイズ: {len(raw_data)} bytes")
+            # サイズチェック
+            data_size = len(raw_data)
+            print(f"DEBUG: {user_name} のデータサイズ: {data_size} bytes")
 
-            if len(raw_data) <= 44:
-                print(f"⚠️ {user_name}: 録音データ自体が空です")
+            if data_size <= 44:
                 continue
 
-            # 2. 加工を一切せず、そのままWatsonへ！
-            print(f"5: Watsonへ生データを送信中... ({user_name})")
+            # 2. Watsonに送信 (変数名を raw_data に統一)
+            print(f"5: Watsonへ送信中... ({user_name})")
+            
             res = stt.recognize(
                 audio=raw_data, 
-                content_type="audio/wav", # SinkがWaveSinkならこれでOK
+                # WaveSinkの標準である48kHz/2chステレオを明示
+                content_type="audio/wav", 
                 model="ja-JP_Multimedia",
                 smart_formatting=True
             ).get_result()
 
-            # (以下、解析結果の処理はそのまま)
-
-            print(f"5: Watson解析リクエスト中... ({user_name})")
-            # --- ここからWatsonのリクエスト ---
-
-            res = stt.recognize(
-                audio=processed_data,
-                content_type="audio/wav",
-                model="ja-JP_Multimedia",
-                smart_formatting=True
-            ).get_result()
-
+            # 3. 解析結果の処理
             if res and "results" in res:
                 for result in res["results"]:
                     rel_start = result.get("timestamp", 0)
@@ -886,9 +877,9 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
                         "name": user_name,
                         "text": transcript.strip()
                     })
+                    print(f"DEBUG: {user_name} の発言: {transcript}")
 
         except Exception as e:
-            # ここで400エラーが出ても、他のユーザーの処理を止めない
             print(f"⚠️ {user_name} の解析中にエラー: {e}")
 
     # --- 並べ替えと送信 ---
@@ -901,7 +892,7 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
         file_buffer = io.BytesIO(text_content.encode('utf-8'))
         await channel.send(file=discord.File(file_buffer, filename="transcript.txt"))
     else:
-        await status_msg.edit(content="聞き取れる音声がありませんでした。")
+        await status_msg.edit(content="聞き取れる言葉が見つかりませんでした。音量が適切か確認してみてね。")
 
     if channel.guild.voice_client:
         await channel.guild.voice_client.disconnect()
