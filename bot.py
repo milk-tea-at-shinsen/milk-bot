@@ -1545,7 +1545,7 @@ async def recstart(ctx):
 async def recstop(ctx):
     vc = ctx.voice_client
     # botがvcに参加している場合
-    if vc
+    if vc:
         if vc.recording:
             vc.stop_recording()
             await ctx.message.delete()
