@@ -831,7 +831,6 @@ async def handle_make_list(message):
 #=====録音後処理=====
 async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextChannel, *args):
     print("[start: after_recording]")
-    await channel.send(f"{bot.user.display_name}が考え中…🤔")
 
     transcripts = []
 
@@ -878,7 +877,7 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
             if user_transcript.strip():
                 transcripts.append(f"{user_name}: {user_transcript.strip()}")
         else:
-            print(f"{user_name}: ⚠️有効な音声認識がありません")
+            print(f"{user_name}:⚠️有効な音声認識がなかったよ")
 
     # --- 結果の送信 ---
     if transcripts:
@@ -1537,9 +1536,9 @@ async def remove_from_list(ctx: discord.ApplicationContext, message: discord.Mes
 #---------------
 # STT関係
 #---------------
-#=====join コマンド=====
-@bot.command(name="join")
-async def join(ctx):
+#=====recstart コマンド=====
+@bot.command(name="recstart")
+async def recstart(ctx):
     # コマンド実行者がvc参加中の場合
     if ctx.author.voice:
         # botが既にvc参加していればエラーメッセージを返す
@@ -1558,29 +1557,16 @@ async def join(ctx):
         await ctx.message.delete()
         await ctx.send("⚠️先にボイスチャンネルに参加してね")
 
-#=====recstart コマンド=====
-@bot.command(name="recstart")
-async def recstart(ctx):
-    if not ctx.author.voice:
-        await ctx.message.delete()
-        return await ctx.send("⚠️先にボイスチャンネルに参加してね")
-
     vc = ctx.voice_client
-    # botがvcに参加している場合
-    if vc:  
-        # 録音開始
-        vc.start_recording(
-            discord.sinks.WaveSink(),
-            after_recording,
-            ctx.channel
-        )
+    # 録音開始
+    vc.start_recording(
+        discord.sinks.WaveSink(),
+        after_recording,
+        ctx.channel
+    )
 
-        await ctx.message.delete()
-        await ctx.send("⏺録音を開始したよ🫡")
-
-    else:
-        await ctx.message.delete()
-        await ctx.send("⚠️先に`!join`を実行してね")
+    await ctx.message.delete()
+    await ctx.send("⏺録音を開始したよ🫡")
 
 #=====recstop コマンド=====
 @bot.command(name="recstop")
@@ -1591,7 +1577,6 @@ async def recstop(ctx):
         if vc.recording:
             vc.stop_recording()
             await ctx.message.delete()
-            await ctx.send("⏹録音停止！文字起こしを始めるよ🫡")
         else:
             await ctx.message.delete()
             await ctx.send("⚠️いまは録音してないよ")
