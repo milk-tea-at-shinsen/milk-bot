@@ -22,6 +22,7 @@ import inspect
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
+intents.voice_states = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 #=====サービスアカウントキーの読込=====
