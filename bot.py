@@ -858,10 +858,10 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
 
             # 2. その後、適切な音量まで「安全に」引き上げる（正規化）
             # これで、音が潰れない範囲で最大の音量に調整されます
-            seg = effects.normalize(seg)
+            #seg = effects.normalize(seg)
 
             # 3. Watsonが聞き取りやすい周波数（16kHz）とモノラルに変換
-            seg = seg.set_channels(1).set_frame_rate(16000)
+            #seg = seg.set_channels(1).set_frame_rate(16000)
 
             # 加工後のデータをバイナリ化
             buf = io.BytesIO()
@@ -1610,6 +1610,13 @@ async def recstart(ctx):
         ctx.channel
     )
     await ctx.send("⏺録音を開始したよ🫡")
+    import subprocess
+    try:
+        subprocess.run(["ffmpeg", "-version"], check=True, capture_output=True)
+        print("✅ ffmpeg は正常にインストールされています")
+    except Exception:
+        print("❌ ffmpeg が見つかりません。Railwayの環境設定が必要です")
+
 
 #=====recstop コマンド=====
 @bot.command(name="recstop")
