@@ -832,45 +832,42 @@ async def handle_make_list(message):
 #=====録音後処理=====
 async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextChannel, *args):
     print("[start: after_recording]")
-    status_msg = await channel.send("🎙 音声を加工して解析中。少し待ってね...")
+    status_msg = await channel.send("🎙 音声を最適化して解析中...")
 
-    all_results = [] # 全員の発言をまとめるリスト
+    all_results = []
 
     for user_id, audio in sink.audio_data.items():
         user = channel.guild.get_member(user_id) or await channel.guild.fetch_member(user_id)
         user_name = user.nick or user.display_name
         
-        # 1. 録音開始時間を安全に取得
         start_time = getattr(audio, "first_packet", 0)
         
         try:
-            # 2. 音声データの読み込み
             audio.file.seek(0)
             raw_data = audio.file.read()
-            if len(raw_data) < 1000: # 短すぎるデータは無視
-                continue
+            if len(raw_data) < 1000: continue # 生データが少なすぎる場合は飛ばす
 
-            # 3. pydubで加工（ガチャガチャ音対策）
+            # --- pydubでの加工処理 ---
             seg = AudioSegment.from_wav(io.BytesIO(raw_data))
-            seg = seg - 20              # 音量をガッツリ下げて音割れを抑える
-            seg = effects.normalize(seg) # 小さくなりすぎないよう調整
-            seg = seg.set_channels(1).set_frame_rate(16000) # Watson仕様に
+            
+            # 音割れ（ガチャガチャ）がひどい場合、まずは正規化より先に音量を下げる
+            seg = seg - 20 
+            seg = effects.normalize(seg)
+            seg = seg.set_channels(1).set_frame_rate(16000)
 
-            # 4. 加工後のデータをバイナリ化
+            # 加工データをバイナリ化
             out_buf = io.BytesIO()
             seg.export(out_buf, format="wav")
             out_buf.seek(0)
             processed_data = out_buf.read()
 
-            # 4.5 データの長さをチェック（44バイト以下はヘッダーのみなのでスキップ）
-            if len(processed_data) <= 44:
-                print(f"⚠️ {user_name} の音声データが空（{len(processed_data)} bytes）のためスキップします")
+            # --- ★ここが重要：Watsonに送る前のチェック ---
+            if len(processed_data) < 100:
+                print(f"⚠️ {user_name} の加工後データが空のためスキップします")
                 continue
 
-            print(f"5: Watsonへ解析リクエスト... ({len(processed_data)} bytes)")
-            # (ここから下の Watson リクエストへ進む)
-
-            # 5. Watsonに解析を依頼
+            print(f"5: Watsonへ送信中... ({user_name}, {len(processed_data)} bytes)")
+            
             res = stt.recognize(
                 audio=processed_data,
                 content_type="audio/wav",
@@ -878,7 +875,6 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
                 smart_formatting=True
             ).get_result()
 
-            # 6. 解析結果をリストに保存
             if res and "results" in res:
                 for result in res["results"]:
                     rel_start = result.get("timestamp", 0)
@@ -892,20 +888,20 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
                     })
 
         except Exception as e:
+            # ここで400エラーが出ても、他のユーザーの処理を止めない
             print(f"⚠️ {user_name} の解析中にエラー: {e}")
 
-    # --- 全員分終わったら時系列で並べ替え ---
+    # --- 並べ替えと送信 ---
     all_results.sort(key=lambda x: x["time"])
     transcripts = [f"{r['name']}: {r['text']}" for r in all_results]
 
-    # --- 結果を送信 ---
     if transcripts:
         await status_msg.edit(content="文字起こし完了！")
         text_content = "\n".join(transcripts)
         file_buffer = io.BytesIO(text_content.encode('utf-8'))
         await channel.send(file=discord.File(file_buffer, filename="transcript.txt"))
     else:
-        await status_msg.edit(content="うーん、何も聞き取れなかったみたい。")
+        await status_msg.edit(content="聞き取れる音声がありませんでした。")
 
     if channel.guild.voice_client:
         await channel.guild.voice_client.disconnect()
