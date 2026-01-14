@@ -27,6 +27,24 @@ intents.members = True
 intents.voice_states = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+if not discord.opus.is_loaded():
+    # Railway(Nixpacks) で libopus がインストールされる標準的なパス
+    opus_paths = [
+        'libopus.so.0', 
+        'libopus.so', 
+        '/usr/lib/libopus.so.0', 
+        '/usr/local/lib/libopus.so.0',
+        '/nix/store/*-libopus-*/lib/libopus.so.0' # Nix特有のパス
+    ]
+    
+    for path in opus_paths:
+        try:
+            discord.opus.load_opus(path)
+            print(f"✅ Opus loaded successfully from: {path}")
+            break
+        except:
+            continue
+
 #=====サービスアカウントキーの読込=====
 #---Vision API---
 info = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
