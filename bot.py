@@ -1474,13 +1474,21 @@ async def remove_from_list(ctx: discord.ApplicationContext, message: discord.Mes
 #=====join コマンド=====
 @bot.command(name="join")
 async def join(ctx):
+    if ctx.voice_client:
+        try:
+            if not ctx.voice_client.is_connected():
+                await ctx.voice_client.disconnect(force=True)
+        except:
+            try:
+                await ctx.voice_client.disconnect(force=True)
+            except:
+                pass
+    
+    
     # コマンド実行者がvc参加中の場合
     if ctx.author.voice:
-        if ctx.voice_client and not ctx.voice_client.is_connected():
-            await ctx.voice_client.disconnect(force=True)
-        
         # botが既にvc参加していればエラーメッセージを返す
-        if ctx.voice_client:
+        if ctx.voice_client and ctx.voice_client.is_connected:
             await ctx.message.delete()
             await ctx.send("⚠️すでにボイスチャンネルに接続してるよ")
         # そうでなければコマンド実行者が参加中のvcに接続する
@@ -1489,6 +1497,7 @@ async def join(ctx):
             await ctx.message.delete()
             await channel.connect()
             await asyncio.sleep(2)
+            vc = ctx.voice_client
             await ctx.send(f"{channel.name}に接続したよ🫡")
     # コマンド実行者がvc参加していなければエラーメッセージを返す
     else:
