@@ -862,6 +862,14 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
             out_buf.seek(0)
             processed_data = out_buf.read()
 
+            # 4.5 データの長さをチェック（44バイト以下はヘッダーのみなのでスキップ）
+            if len(processed_data) <= 44:
+                print(f"⚠️ {user_name} の音声データが空（{len(processed_data)} bytes）のためスキップします")
+                continue
+
+            print(f"5: Watsonへ解析リクエスト... ({len(processed_data)} bytes)")
+            # (ここから下の Watson リクエストへ進む)
+
             # 5. Watsonに解析を依頼
             res = stt.recognize(
                 audio=processed_data,
