@@ -832,59 +832,51 @@ async def handle_make_list(message):
 #=====録音後処理=====
 async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextChannel, *args):
     print("[start: after_recording]")
-    status_msg = await channel.send(f"{bot.user.display_name}が考え中…🤔")
+    status_msg = await channel.send("🎙 音声を加工して解析中。少し待ってね...")
 
-    # 全ユーザーの発言を一時的に格納するリスト
-    all_results = []
+    all_results = [] # 全員の発言をまとめるリスト
 
     for user_id, audio in sink.audio_data.items():
         user = channel.guild.get_member(user_id) or await channel.guild.fetch_member(user_id)
         user_name = user.nick or user.display_name
         
-        # --- 開始時間の取得 ---
-        # 属性がない場合を考慮して、安全に取得（デフォルトは0）
-        start_time = getattr(audio, "first_packet", 0) 
-        if start_time == 0:
-            # first_packetがない場合、内部のtimestamp等を探る
-            start_time = getattr(audio, "timestamp", 0)
+        # 1. 録音開始時間を安全に取得
+        start_time = getattr(audio, "first_packet", 0)
         
         try:
+            # 2. 音声データの読み込み
             audio.file.seek(0)
-            seg = AudioSegment.from_wav(audio.file)
+            raw_data = audio.file.read()
+            if len(raw_data) < 1000: # 短すぎるデータは無視
+                continue
 
-            # 1. まず音量を15〜20dBくらいガッツリ下げる（これで「ガチャガチャ」を抑える）
-            # ※音割れした状態で録音されていても、少しマシになります
-            seg = seg - 15
+            # 3. pydubで加工（ガチャガチャ音対策）
+            seg = AudioSegment.from_wav(io.BytesIO(raw_data))
+            seg = seg - 20              # 音量をガッツリ下げて音割れを抑える
+            seg = effects.normalize(seg) # 小さくなりすぎないよう調整
+            seg = seg.set_channels(1).set_frame_rate(16000) # Watson仕様に
 
-            # 2. その後、適切な音量まで「安全に」引き上げる（正規化）
-            # これで、音が潰れない範囲で最大の音量に調整されます
-            #seg = effects.normalize(seg)
+            # 4. 加工後のデータをバイナリ化
+            out_buf = io.BytesIO()
+            seg.export(out_buf, format="wav")
+            out_buf.seek(0)
+            processed_data = out_buf.read()
 
-            # 3. Watsonが聞き取りやすい周波数（16kHz）とモノラルに変換
-            #seg = seg.set_channels(1).set_frame_rate(16000)
-
-            # 加工後のデータをバイナリ化
-            buf = io.BytesIO()
-            seg.export(buf, format="wav")
-            processed_audio_data = buf.read()
-
-            if len(processed_audio_data) < 100: continue
-
+            # 5. Watsonに解析を依頼
             res = stt.recognize(
-                audio=processed_audio_data,
+                audio=processed_data,
                 content_type="audio/wav",
                 model="ja-JP_Multimedia",
                 smart_formatting=True
             ).get_result()
 
+            # 6. 解析結果をリストに保存
             if res and "results" in res:
                 for result in res["results"]:
-                    # Watsonの各結果に「開始時間」と「名前」を紐付けて保存
-                    # Watsonの各resultにも timestamp が入っているので加算する
                     rel_start = result.get("timestamp", 0)
                     actual_start = start_time + rel_start
-                    
                     transcript = result["alternatives"][0]["transcript"]
+                    
                     all_results.append({
                         "time": actual_start,
                         "name": user_name,
@@ -892,46 +884,23 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
                     })
 
         except Exception as e:
-            print(f"⚠️{user_name}の解析エラー: {e}")
+            print(f"⚠️ {user_name} の解析中にエラー: {e}")
 
-    # --- ここで「全ユーザーの発言」を時間順にソート ---
+    # --- 全員分終わったら時系列で並べ替え ---
     all_results.sort(key=lambda x: x["time"])
-
-    # テキスト化
     transcripts = [f"{r['name']}: {r['text']}" for r in all_results]
 
-    # --- 結果の送信部分 ---
+    # --- 結果を送信 ---
     if transcripts:
-        await status_msg.edit(content="文字起こしが完了したよ🫡")
-        
-        # 1. テキストファイルの送信
-        text = "\n".join(transcripts)
-        text_buffer = io.BytesIO(text.encode('utf-8'))
-        await channel.send(file=discord.File(text_buffer, filename="transcript.txt"))
+        await status_msg.edit(content="文字起こし完了！")
+        text_content = "\n".join(transcripts)
+        file_buffer = io.BytesIO(text_content.encode('utf-8'))
+        await channel.send(file=discord.File(file_buffer, filename="transcript.txt"))
+    else:
+        await status_msg.edit(content="うーん、何も聞き取れなかったみたい。")
 
-        # 2. 【追加】実際の音声ファイルも送ってみる（デバッグ用）
-        # 全ユーザー分送ると大変なので、とりあえず最初の1人分を確認
-        for user_id, audio in sink.audio_data.items():
-            audio.file.seek(0)
-    
-            # 1. 生データを一度読み込む
-            # PycordのWaveSinkは 48,000Hz / 2ch(ステレオ) / 16-bit PCM が標準です
-            try:
-                segment = AudioSegment.from_wav(audio.file)
-                
-                # 2. 標準的な形式（16kHz、モノラルなど）に整形してバッファに書き出し
-                # これでヘッダーが正しく作り直されます
-                debug_buffer = io.BytesIO()
-                segment.export(debug_buffer, format="wav")
-                debug_buffer.seek(0)
-        
-                # 3. 修正したWAVを送信
-                await channel.send(
-                    content=f"修正版WAV（User ID: {user_id}）",
-                    file=discord.File(debug_buffer, filename=f"fixed_{user_id}.wav")
-                )
-            except Exception as e:
-                print(f"WAV修復失敗: {e}")
+    if channel.guild.voice_client:
+        await channel.guild.voice_client.disconnect()
 
 #===============
 # クラス定義
