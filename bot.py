@@ -843,17 +843,37 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
         start_time = getattr(audio, "first_packet", 0)
         
         try:
-            # 1. データの取り出し
+            # 1. 音声データの取得
             audio.file.seek(0)
             raw_data = audio.file.read()
+            if len(raw_data) <= 44: continue
+
+            # 2. pydubで読み込む
+            seg = AudioSegment.from_wav(io.BytesIO(raw_data))
+
+            # --- 自動Bot判定セクション ---
+            # user.bot は Botアカウントなら True を返す便利な属性です
+            if user.bot:
+                print(f"🤖 Bot検出: {user_name} の音声を強力に抑制 (-35dB)")
+                seg = seg - 35
+                seg = effects.normalize(seg) # 割れた波形を可能な限り復元
+            else:
+                print(f"👤 人間検出: {user_name} の音声を最適化 (-3dB)")
+                seg = seg - 3 
+            # --------------------------
+
+            # 3. フォーマット変換（Watsonの好みに合わせる）
+            seg = seg.set_channels(1).set_frame_rate(16000)
+
+            # 4. 書き出し
+            out_buf = io.BytesIO()
+            seg.export(out_buf, format="wav")
+            out_buf.seek(0)
+            processed_data = out_buf.read()
+
+            print(f"5: Watson解析リクエスト中... ({user_name})")
             
-            # サイズチェック
-            data_size = len(raw_data)
-            print(f"DEBUG: {user_name} のデータサイズ: {data_size} bytes")
-
-            if data_size <= 44:
-                continue
-
+            # (以下、Watsonへの送信処理)
             # 2. Watsonに送信 (変数名を raw_data に統一)
             print(f"5: Watsonへ送信中... ({user_name})")
             
