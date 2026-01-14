@@ -1545,9 +1545,14 @@ async def recstart(ctx):
 async def recstop(ctx):
     vc = ctx.voice_client
     # botがvcに参加している場合
-    if vc:
-        vc.stop_recording()
-        await ctx.send("⏹録音停止！文字起こしを始めるよ🫡")
+    if vc
+        if vc.recording:
+            vc.stop_recording()
+            await ctx.message.delete()
+            await ctx.send("⏹録音停止！文字起こしを始めるよ🫡")
+        else:
+            await ctx.message.delete()
+            await ctx.send("⚠️いまは録音してないよ")
 
 # Botを起動
 bot.run(os.getenv("DISCORD_TOKEN"))
