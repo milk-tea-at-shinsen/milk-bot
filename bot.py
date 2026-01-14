@@ -884,17 +884,25 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
     # テキスト化
     transcripts = [f"{r['name']}: {r['text']}" for r in all_results]
 
-    # --- 送信処理 ---
+    # --- 結果の送信部分 ---
     if transcripts:
-        await status_msg.edit(content="文字起こしが完了したよ🫡（時系列順）")
+        await status_msg.edit(content="文字起こしが完了したよ🫡")
+        
+        # 1. テキストファイルの送信
         text = "\n".join(transcripts)
-        file_buffer = io.BytesIO(text.encode('utf-8'))
-        await channel.send(file=discord.File(file_buffer, filename="transcript.txt"))
-    else:
-        await status_msg.edit(content="⚠️有効な発言が見つからなかったよ")
+        text_buffer = io.BytesIO(text.encode('utf-8'))
+        await channel.send(file=discord.File(text_buffer, filename="transcript.txt"))
 
-    if channel.guild.voice_client:
-        await channel.guild.voice_client.disconnect()
+        # 2. 【追加】実際の音声ファイルも送ってみる（デバッグ用）
+        # 全ユーザー分送ると大変なので、とりあえず最初の1人分を確認
+        for user_id, audio in sink.audio_data.items():
+            audio.file.seek(0)
+            # discord.Fileとしてそのまま送信
+            await channel.send(
+                content=f"送られた音声データを確認してみてね（User ID: {user_id}）",
+                file=discord.File(audio.file, filename=f"debug_audio_{user_id}.wav")
+            )
+            break # 1人分だけでOKならbreak
 
 #===============
 # クラス定義
