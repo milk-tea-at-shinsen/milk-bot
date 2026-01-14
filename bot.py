@@ -871,11 +871,17 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
             out_buf.seek(0)
             processed_data = out_buf.read()
 
+            # --- デバッグ用：実際に送っている音声ファイルを書き出す ---
+            debug_file = io.BytesIO(processed_data)
+            await channel.send(
+                content=f"🔍 Watson送信用データ確認 ({user_name})",
+                file=discord.File(debug_file, filename=f"debug_{user_id}.wav")
+            )
+            # ---------------------------------------------------
+
+            # この直後に stt.recognize(...) が続く
+
             print(f"5: Watson解析リクエスト中... ({user_name})")
-            
-            # (以下、Watsonへの送信処理)
-            # 2. Watsonに送信 (変数名を raw_data に統一)
-            print(f"5: Watsonへ送信中... ({user_name})")
             
             res = stt.recognize(
                 audio=raw_data, 
