@@ -1564,8 +1564,6 @@ async def recstart(ctx):
         after_recording,
         ctx.channel
     )
-
-    await ctx.message.delete()
     await ctx.send("⏺録音を開始したよ🫡")
 
 #=====recstop コマンド=====
