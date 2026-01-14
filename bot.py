@@ -832,53 +832,67 @@ async def handle_make_list(message):
 #=====録音後処理=====
 async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextChannel, *args):
     print("[start: after_recording]")
-    message = await channel.send(f"{bot.user.display_name}が考え中…🤔")
+    status_msg = await channel.send(f"{bot.user.display_name}が考え中…🤔")
 
-    combined_audio = AudioSegment.empty()
+    # 全ユーザーの発言を一時的に格納するリスト
+    all_results = []
 
     for user_id, audio in sink.audio_data.items():
-        # ユーザーごとの音声ファイルを読み込む
-        audio.file.seek(0)
-        segment = AudioSegment.from_wav(audio.file)
+        user = channel.guild.get_member(user_id) or await channel.guild.fetch_member(user_id)
+        user_name = user.nick or user.display_name
         
-        # 録音開始からのズレ（ミリ秒）を計算
-        start_ms = audio.first_packet * 1000
+        # --- 開始時間の取得 ---
+        # 属性がない場合を考慮して、安全に取得（デフォルトは0）
+        start_time = getattr(audio, "first_packet", 0) 
+        if start_time == 0:
+            # first_packetがない場合、内部のtimestamp等を探る
+            start_time = getattr(audio, "timestamp", 0)
         
-        # 1本の長い音声テープの「正しい時間」の位置に音を重ねる
-        combined_audio = combined_audio.overlay(segment, position=start_ms)
-    
-    # 合成した音声のバイナリ化
-    combined_buffer = io.BytesIO()
-    combined_audio.export(combined_buffer, format="wav")
-    combined_buffer.seek(0)
-    final_audio_data = combined_buffer.read()
+        try:
+            audio.file.seek(0)
+            audio_data = audio.file.read()
 
-    # 音声認識APIに送信
-    transcripts = []
-    try:
-        res = stt.recognize(
-            audio=final_audio_data,
-            content_type="audio/wav",
-            model="ja-JP_Multimedia",
-            smart_formatting=True,
-            speaker_labels=True
-        ).get_result()
+            if len(audio_data) < 100: continue
 
-        if res and "results" in res:
-            for result in res["results"]:
-                transcript = result["alternatives"][0]["transcript"]
-                transcripts.append(transcript.strip())
-    except Exception as e:
-        print(f"解析エラー: {e}")
+            res = stt.recognize(
+                audio=audio_data,
+                content_type="audio/wav",
+                model="ja-JP_Multimedia",
+                smart_formatting=True
+            ).get_result()
 
-    # 結果の送信
+            if res and "results" in res:
+                for result in res["results"]:
+                    # Watsonの各結果に「開始時間」と「名前」を紐付けて保存
+                    # Watsonの各resultにも timestamp が入っているので加算する
+                    rel_start = result.get("timestamp", 0)
+                    actual_start = start_time + rel_start
+                    
+                    transcript = result["alternatives"][0]["transcript"]
+                    all_results.append({
+                        "time": actual_start,
+                        "name": user_name,
+                        "text": transcript.strip()
+                    })
+
+        except Exception as e:
+            print(f"⚠️{user_name}の解析エラー: {e}")
+
+    # --- ここで「全ユーザーの発言」を時間順にソート ---
+    all_results.sort(key=lambda x: x["time"])
+
+    # テキスト化
+    transcripts = [f"{r['name']}: {r['text']}" for r in all_results]
+
+    # --- 送信処理 ---
     if transcripts:
+        await status_msg.edit(content="文字起こしが完了したよ🫡（時系列順）")
         text = "\n".join(transcripts)
         file_buffer = io.BytesIO(text.encode('utf-8'))
-        await message.edit(f"文字起こしが完了したよ🫡", file=discord.File(file_buffer, filename="transcript.txt"))
+        await channel.send(file=discord.File(file_buffer, filename="transcript.txt"))
     else:
-        await message.edit(f"⚠️文字起こしする内容がなかったよ")
-    
+        await status_msg.edit(content="⚠️有効な発言が見つからなかったよ")
+
     if channel.guild.voice_client:
         await channel.guild.voice_client.disconnect()
 
