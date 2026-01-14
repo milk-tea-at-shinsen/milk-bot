@@ -836,25 +836,26 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
     transcripts = []
 
     for user_id, audio in sink.audio_data.items():
-        response = None
-        audio_data = audio.file.read()
-
-        transcript = response.get("results", [{}])[0].get("alternatives", [{}])[0].get("transcript", "")
+        # ユーザー名の取得
         user = channel.guild.get_member(user_id) or await channel.guild.fetch_member(user_id)
         user_name = user.nick or user.display_name
+
+        # 変数の初期化
+        response = None
         
         try:
-            # データの先頭に戻す
+            # データの先頭に戻して読み込む
             audio.file.seek(0)
             audio_data = audio.file.read()
 
-            if not audio_data or len(audio_data) < 100: # 極端に短いデータは無視
+            if not audio_data or len(audio_data) < 100:
                 print(f"{user_name}の音声データが空だよ")
                 continue
 
+            # Watson APIの呼び出し
             res = stt.recognize(
                 audio=audio_data,
-                content_typy="audio/wav",
+                content_type="audio/wav",
                 model="ja-JP_Multimedia",
                 smart_formatting=True
             )
@@ -863,19 +864,23 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
         except Exception as e:
             print(f"⚠️{user_name}の音声認識ができなかったよ: {e}")
             continue
-    
+
+        # --- 認識結果の解析 ---
         if response and "results" in response and len(response["results"]) > 0:
-            # 階層を一つずつ安全に辿る
-            first_result = response["results"][0]
-            alternatives = first_result.get("alternatives", [])
+            results = response.get("results", [])
+            # 認識された全てのフレーズを結合
+            user_transcript = ""
+            for result in results:
+                alternatives = result.get("alternatives", [])
+                if alternatives:
+                    user_transcript += alternatives[0].get("transcript", "")
             
-            if alternatives and len(alternatives) > 0:
-                transcript = alternatives[0].get("transcript", "")
-                if transcript.strip():
-                    transcripts.append(f"{user_name}: {transcript.strip()}")
+            if user_transcript.strip():
+                transcripts.append(f"{user_name}: {user_transcript.strip()}")
         else:
             print(f"{user_name}: ⚠️有効な音声認識がありません")
 
+    # --- 結果の送信 ---
     if transcripts:
         text = "\n".join(transcripts)
         file_buffer = io.BytesIO(text.encode('utf-8'))
