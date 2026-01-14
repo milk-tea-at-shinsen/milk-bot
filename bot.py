@@ -831,6 +831,7 @@ async def handle_make_list(message):
 #=====録音後処理=====
 async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextChannel, *args):
     print("[start: after_recording]")
+    message = await channel.send(f"{bot.user.display_name}が考え中…🤔")
 
     transcripts = []
 
@@ -883,9 +884,12 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
     if transcripts:
         text = "\n".join(transcripts)
         file_buffer = io.BytesIO(text.encode('utf-8'))
-        await channel.send(f"文字起こしが完了したよ🫡", file=discord.File(file_buffer, filename="transcript.txt"))
+        await message.edit(f"文字起こしが完了したよ🫡", file=discord.File(file_buffer, filename="transcript.txt"))
     else:
-        await channel.send(f"⚠️文字起こしする内容がなかったよ")
+        await message.edit(f"⚠️文字起こしする内容がなかったよ")
+    
+    if channel.guild.voice_client:
+        await channel.guild.voice_client.disconnect()
 
 #===============
 # クラス定義
@@ -1573,8 +1577,8 @@ async def recstop(ctx):
     # botがvcに参加している場合
     if vc:
         if vc.recording:
-            vc.stop_recording()
             await ctx.message.delete()
+            vc.stop_recording()
         else:
             await ctx.message.delete()
             await ctx.send("⚠️いまは録音してないよ")
