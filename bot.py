@@ -19,6 +19,8 @@ from functools import wraps
 import inspect
 from ibm_watson import SpeechToTextV1
 from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
+import ctypes
+import ctypes.util
 
 #=====Botの準備=====
 intents = discord.Intents.default()
@@ -28,22 +30,16 @@ intents.voice_states = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 if not discord.opus.is_loaded():
-    # Railway(Nixpacks) で libopus がインストールされる標準的なパス
-    opus_paths = [
-        'libopus.so.0', 
-        'libopus.so', 
-        '/usr/lib/libopus.so.0', 
-        '/usr/local/lib/libopus.so.0',
-        '/nix/store/*-libopus-*/lib/libopus.so.0' # Nix特有のパス
-    ]
-    
-    for path in opus_paths:
-        try:
-            discord.opus.load_opus(path)
-            print(f"✅ Opus loaded successfully from: {path}")
-            break
-        except:
-            continue
+    try:
+        # Nixpacksが設定するライブラリパスの中からlibopusを探す
+        lib_path = ctypes.util.find_library('opus')
+        if lib_path:
+            discord.opus.load_opus(lib_path)
+        else:
+            # 見つからない場合の「決め打ち」パス（Nixpacksの標準的な配置）
+            discord.opus.load_opus('/usr/lib/libopus.so.0')
+    except Exception as e:
+        print(f"Opus loading error: {e}")
 
 #=====サービスアカウントキーの読込=====
 #---Vision API---
