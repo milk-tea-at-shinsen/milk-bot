@@ -843,30 +843,27 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
         start_time = getattr(audio, "first_packet", 0)
         
         try:
+            # 1. 生のデータを取得するだけ
             audio.file.seek(0)
             raw_data = audio.file.read()
-            if len(raw_data) < 100: continue
+            
+            # ログでサイズを確認（ここが44より大きければ、音は存在します）
+            print(f"DEBUG: {user_name} の生データサイズ: {len(raw_data)} bytes")
 
-            # 1. pydubで読み込む
-            seg = AudioSegment.from_wav(io.BytesIO(raw_data))
-
-            # 2. 加工を最小限にする
-            # 20dBも下げず、5dBくらいに留める。
-            # normalize（正規化）は、音割れがひどい時だけ効くように最後に持ってくる。
-            seg = seg - 5
-            seg = seg.set_channels(1).set_frame_rate(16000)
-            seg = effects.normalize(seg) # 最後に全体のバランスを整える
-
-            # 3. 書き出し
-            out_buf = io.BytesIO()
-            seg.export(out_buf, format="wav")
-            out_buf.seek(0)
-            processed_data = out_buf.read()
-
-            # データチェック（44バイトはWAVヘッダーのみのサイズ）
-            if len(processed_data) <= 44:
-                print(f"⚠️ {user_name}: データが空です")
+            if len(raw_data) <= 44:
+                print(f"⚠️ {user_name}: 録音データ自体が空です")
                 continue
+
+            # 2. 加工を一切せず、そのままWatsonへ！
+            print(f"5: Watsonへ生データを送信中... ({user_name})")
+            res = stt.recognize(
+                audio=raw_data, 
+                content_type="audio/wav", # SinkがWaveSinkならこれでOK
+                model="ja-JP_Multimedia",
+                smart_formatting=True
+            ).get_result()
+
+            # (以下、解析結果の処理はそのまま)
 
             print(f"5: Watson解析リクエスト中... ({user_name})")
             # --- ここからWatsonのリクエスト ---
@@ -1586,13 +1583,6 @@ async def recstart(ctx):
         ctx.channel
     )
     await ctx.send("⏺録音を開始したよ🫡")
-    import subprocess
-    try:
-        subprocess.run(["ffmpeg", "-version"], check=True, capture_output=True)
-        print("✅ ffmpeg は正常にインストールされています")
-    except Exception:
-        print("❌ ffmpeg が見つかりません。Railwayの環境設定が必要です")
-
 
 #=====recstop コマンド=====
 @bot.command(name="recstop")
