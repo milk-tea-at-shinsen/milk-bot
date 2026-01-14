@@ -842,7 +842,7 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
         
         start_time = getattr(audio, "first_packet", 0)
         
-                try:
+        try:
             audio.file.seek(0)
             raw_data = audio.file.read()
             if len(raw_data) < 100: continue
