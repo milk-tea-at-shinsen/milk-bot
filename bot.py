@@ -831,10 +831,11 @@ async def handle_make_list(message):
 async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextChannel, *args):
     print("[start: after_recording]")
     await channel.send(f"{bot.user.display_name}が考え中…🤔")
-    
-    trancripts = []
+
+    transcripts = []
 
     for user_id, audio in sink.audio_data.items():
+        response = None
         audio_data = audio.file.read()
 
         transcript = response.get("results", [{}])[0].get("alternatives", [{}])[0].get("transcript", "")
@@ -842,19 +843,36 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
         user_name = user.nick or user.display_name
         
         try:
-            response = stt.recognize(
+            # データの先頭に戻す
+            audio.file.seek(0)
+            audio_data = audio.file.read()
+
+            if len(audio_data) == 0:
+                print(f"{user_name}の音声データが空だよ")
+                continue
+
+            res = stt.recognize(
                 audio=audio_data,
                 content_typy="audio/wav",
                 model="ja-JP_Multimedia",
                 smart_formatting=True
-            ).get_result()
-            trancripts.append(f"{user_name}: {transcript.strip()}")
+            )
+            response = res.get_result()
             
         except Exception as e:
-            await channel.send(f"⚠️{user_name}の音声認識ができなかったよ: {e}")
+            print(f"⚠️{user_name}の音声認識ができなかったよ: {e}")
+            continue
+    
+    if response and "results" in response:
+            try:
+                # 1文字ずつのリストにならないよう、文字列として取得
+                transcript = response.get("results", [{}])[0].get("alternatives", [{}])[0].get("transcript", "")
+                transcripts.append(f"{user_name}: {transcript.strip()}")
+            except (IndexError, KeyError):
+                print(f"{user_name}の解析結果が空でした。")
 
-    if trancripts:
-        text = "\n".join(trancripts)
+    if transcripts:
+        text = "\n".join(transcripts)
         file_buffer = io.BytesIO(text.encode('utf-8'))
         await channel.send(f"文字起こしが完了したよ🫡", file=discord.File(file_buffer, filename="transcript.txt"))
     else:
