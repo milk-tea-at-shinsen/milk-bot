@@ -855,7 +855,7 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
             # user.bot は Botアカウントなら True を返す便利な属性です
             if user.bot:
                 print(f"🤖 Bot検出: {user_name} の音声を強力に抑制 (-35dB)")
-                seg = seg - 35
+                seg = seg - 15
                 seg = effects.normalize(seg) # 割れた波形を可能な限り復元
             else:
                 print(f"👤 人間検出: {user_name} の音声を最適化 (-3dB)")
