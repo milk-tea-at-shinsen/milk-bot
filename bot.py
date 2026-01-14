@@ -21,6 +21,7 @@ from ibm_watson import SpeechToTextV1
 from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 import ctypes
 import ctypes.util
+from pydub import AudioSegment
 
 #=====Botの準備=====
 intents = discord.Intents.default()
@@ -833,54 +834,44 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
     print("[start: after_recording]")
     message = await channel.send(f"{bot.user.display_name}が考え中…🤔")
 
-    transcripts = []
+    combined_audio = AudioSegment.empty()
 
     for user_id, audio in sink.audio_data.items():
-        # ユーザー名の取得
-        user = channel.guild.get_member(user_id) or await channel.guild.fetch_member(user_id)
-        user_name = user.nick or user.display_name
-
-        # 変数の初期化
-        response = None
+        # ユーザーごとの音声ファイルを読み込む
+        audio.file.seek(0)
+        segment = AudioSegment.from_wav(audio.file)
         
-        try:
-            # データの先頭に戻して読み込む
-            audio.file.seek(0)
-            audio_data = audio.file.read()
+        # 録音開始からのズレ（ミリ秒）を計算
+        start_ms = audio.first_packet * 1000
+        
+        # 1本の長い音声テープの「正しい時間」の位置に音を重ねる
+        combined_audio = combined_audio.overlay(segment, position=start_ms)
+    
+    # 合成した音声のバイナリ化
+    combined_buffer = io.BytesIO()
+    combined_audio.export(combined_buffer, format="wav")
+    combined_buffer.seek(0)
+    final_audio_data = combined_buffer.read()
 
-            if not audio_data or len(audio_data) < 100:
-                print(f"{user_name}の音声データが空だよ")
-                continue
+    # 音声認識APIに送信
+    transcripts = []
+    try:
+        res = stt.recognize(
+            audio=final_audio_data,
+            content_type="audio/wav",
+            model="ja-JP_Multimedia",
+            smart_formatting=True,
+            speaker_labels=True
+        ).get_result()
 
-            # Watson APIの呼び出し
-            res = stt.recognize(
-                audio=audio_data,
-                content_type="audio/wav",
-                model="ja-JP_Multimedia",
-                smart_formatting=True
-            )
-            response = res.get_result()
-            
-        except Exception as e:
-            print(f"⚠️{user_name}の音声認識ができなかったよ: {e}")
-            continue
+        if res and "results" in res:
+            for result in res["results"]:
+                transcript = result["alternatives"][0]["transcript"]
+                transcripts.append(transcript.strip())
+    except Exception as e:
+        print(f"解析エラー: {e}")
 
-        # --- 認識結果の解析 ---
-        if response and "results" in response and len(response["results"]) > 0:
-            results = response.get("results", [])
-            # 認識された全てのフレーズを結合
-            user_transcript = ""
-            for result in results:
-                alternatives = result.get("alternatives", [])
-                if alternatives:
-                    user_transcript += alternatives[0].get("transcript", "")
-            
-            if user_transcript.strip():
-                transcripts.append(f"{user_name}: {user_transcript.strip()}")
-        else:
-            print(f"{user_name}:⚠️有効な音声認識がなかったよ")
-
-    # --- 結果の送信 ---
+    # 結果の送信
     if transcripts:
         text = "\n".join(transcripts)
         file_buffer = io.BytesIO(text.encode('utf-8'))

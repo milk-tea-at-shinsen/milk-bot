@@ -5,3 +5,4 @@ aiohttp
 PyNaCl>=1.6.0
 ibm-watson
 ibm-cloud-sdk-core
+pydub
