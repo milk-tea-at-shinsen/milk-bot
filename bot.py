@@ -21,7 +21,7 @@ from ibm_watson import SpeechToTextV1
 from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 import ctypes
 import ctypes.util
-from pydub import AudioSegment
+from pydub import AudioSegment, effects
 
 #=====Botの準備=====
 intents = discord.Intents.default()
