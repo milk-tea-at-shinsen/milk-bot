@@ -1555,13 +1555,12 @@ async def recstart(ctx):
             await ctx.message.delete()
             await channel.connect()
             vc = ctx.voice_client
-            await ctx.send(f"{channel.name}に接続したよ🫡")
+
     # コマンド実行者がvc参加していなければエラーメッセージを返す
     else:
         await ctx.message.delete()
         await ctx.send("⚠️先にボイスチャンネルに参加してね")
 
-    vc = ctx.voice_client
     # 録音開始
     vc.start_recording(
         discord.sinks.WaveSink(),
