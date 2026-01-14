@@ -34,6 +34,9 @@ client = vision.ImageAnnotatorClient(credentials=credentials)
 #---Watson STT---
 WATSON_STT_API_KEY = os.getenv("WATSON_STT_API_KEY")
 WATSON_STT_URL = os.getenv("WATSON_STT_URL")
+authenticator = IAMAuthenticator(WATSON_STT_API_KEY)
+stt = SpeechToTextV1(authenticator=authenticator)
+stt.set_service_url(WATSON_STT_URL)
 
 #===================================
 # 定数・グローバル変数・辞書の準備
@@ -805,6 +808,42 @@ async def handle_make_list(message):
     
     await message.delete()
 
+#---------------
+# STT関係
+#---------------
+#=====録音後処理=====
+async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextChannel, *args):
+    print("[start: after_recording]")
+    await channel.send(f"{bot.user.display_name}が考え中…🤔")
+    
+    trancripts = []
+
+    for user_id, audio in sink.audio_data.items():
+        audio_data = audio.file.read()
+
+        transcript = response.get("results", [{}])[0].get("alternatives", [{}])[0].get("transcript", "")
+        user = channel.guild.get_member(user_id) or await channel.guild.fetch_member(user_id)
+        user_name = user.nick or user.display_name
+        
+        try:
+            response = stt.recognize(
+                audio=audio_data,
+                content_typy="audio/wav",
+                model="ja-JP_Multimedia",
+                smart_formatting=True
+            ).get_result()
+            trancripts.append(f"{user_name}: {transcript.strip()}")
+            
+        except Exception as e:
+            await channel.send(f"⚠️{user_name}の音声認識ができなかったよ: {e}")
+
+    if trancripts:
+        text = "\n".join(trancripts)
+        file_buffer = io.BytesIO(text.encode('utf-8'))
+        await channel.send(f"文字起こしが完了したよ🫡", file=discord.File(file_buffer, filename="transcript.txt"))
+    else:
+        await channel.send(f"⚠️文字起こしする内容がなかったよ")
+
 #===============
 # クラス定義
 #===============
@@ -1056,24 +1095,6 @@ class VoteSelectMode(Enum):
     CANCEL_PROXY_VOTE = "cancel_proxy_vote"
     ADD_OPTION = "add_option"
     DELETE_VOTE = "delete_vote"
-
-#===============
-# STT関係
-#===============
-#=====録音=====
-class OpusRecorder:
-    # クラスの初期設定
-    def __init__(self, *args, **kwargs):
-        self.data = bytearray()
-
-    # 録音開始時
-    def write(self, data, filename):
-        self.data.extend(data)
-        self.filename = filename
-
-    # 録音終了時
-    def get_opus(self):
-        return bytes(self.data)
 
 #====================
 # イベントハンドラ
@@ -1469,23 +1490,12 @@ async def remove_from_list(ctx: discord.ApplicationContext, message: discord.Mes
     else:
         await ctx.interaction.response.send_message(content=f"️⚠️リストの項目以外は削除できないよ", ephemeral=True)
 
-#====================
+#---------------
 # STT関係
-#====================
+#---------------
 #=====join コマンド=====
 @bot.command(name="join")
 async def join(ctx):
-    if ctx.voice_client:
-        try:
-            if not ctx.voice_client.is_connected():
-                await ctx.voice_client.disconnect(force=True)
-        except:
-            try:
-                await ctx.voice_client.disconnect(force=True)
-            except:
-                pass
-    
-    
     # コマンド実行者がvc参加中の場合
     if ctx.author.voice:
         # botが既にvc参加していればエラーメッセージを返す
@@ -1497,7 +1507,6 @@ async def join(ctx):
             channel = ctx.author.voice.channel
             await ctx.message.delete()
             await channel.connect()
-            await asyncio.sleep(2)
             vc = ctx.voice_client
             await ctx.send(f"{channel.name}に接続したよ🫡")
     # コマンド実行者がvc参加していなければエラーメッセージを返す
@@ -1508,21 +1517,18 @@ async def join(ctx):
 #=====recstart コマンド=====
 @bot.command(name="recstart")
 async def recstart(ctx):
+    if not ctx.author.voice:
+        await ctx.message.delete()
+        return await ctx.send("⚠️先にボイスチャンネルに参加してね")
+
     vc = ctx.voice_client
     # botがvcに参加している場合
-    if vc:
-        # ファイル名を作成
-        ts = datetime.now(JST).strftime("%Y%m%d_%H%M")
-        filename = f"/tmp/vc_{ts}.ogg"
-        
+    if vc:  
         # 録音開始
-        recorder = OpusRecorder(filename)
-        vc.recorder = recorder
-
-        await vc.start_recording(
-            recorder,
-            lambda *args: None,
-            ctx
+        vc.start_recording(
+            discord.sinks.WaveSink(),
+            after_recording,
+            ctx.channel
         )
 
         await ctx.message.delete()
@@ -1539,41 +1545,7 @@ async def recstop(ctx):
     # botがvcに参加している場合
     if vc:
         vc.stop_recording()
-        filename = vc.recorder.filename
-        
-        if filename:
-            # 録音データが存在する場合、Watson APIに渡すデータを作成
-            await ctx.send("⏹録音停止！文字起こしを始めるよ🫡")
-            with open(filename, "rb") as f:
-                audio = f.read()
-            headers = {"Content-Type": "audio/ogg;codecs=opus"}
-            auth = ("apikey", WATSON_STT_API_KEY)
-    
-            # Watson APIにデータを渡してjsonファイルを受け取る
-            response = await loop.run_in_exector(
-                None,
-                lambda: requests.post(
-                    WATSON_STT_URL,
-                    headers=headers,
-                    data=audio,
-                    auth=auth
-                )
-            )
-
-            # jsonファイルをテキスト化
-            result = response.json()
-            text = result.get("results", [{}])[0].get("alternatives", [{}])[0].get("transcript", "")
-
-            # テキストが空の場合
-            if not text.strip():
-                text = "(何もしゃべってなかったみたい…)"
-
-            # テキストファイルを保存
-            filename = filename.replace("opus", "txt")
-            with open(filename, "w", encoding="utf-8-sig") as f:
-                f.write(text)
-
-            await ctx.send(f"文字起こしが終わったよ🫡",file=discord.File(filename))
+        await ctx.send("⏹録音停止！文字起こしを始めるよ🫡")
 
 # Botを起動
 bot.run(os.getenv("DISCORD_TOKEN"))

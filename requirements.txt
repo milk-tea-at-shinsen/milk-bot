@@ -3,3 +3,4 @@ emoji>=2.2.0
 google-cloud-vision
 aiohttp
 PyNaCl==1.5.0
+ibm-watson
