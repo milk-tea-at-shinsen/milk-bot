@@ -849,7 +849,7 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
             if len(raw_data) <= 100: continue
 
             # 2. pydubで読み込む
-            seg = AudioSegment.from_raw(
+            seg = AudioSegment.from_mp3(
                 io.BytesIO(raw_data),
                 sample_width=2,
                 frame_rate=48000,
