@@ -899,6 +899,9 @@ def write_vc_log(channel_id, start_time):
         make_csv(filename, rows, meta, header)
         print(f"VCログを保存: {filename}")
         
+        # discordに送信
+        await interaction.followup.send(content="VCのログのCSVだよ🫡", file=discord.File(filename))
+        
         channel_name = bot.get_channel(channel_id).name
         # 録音セッション辞書からチャンネルIDを削除
         remove_rec_session(channel_id, channel_name)
