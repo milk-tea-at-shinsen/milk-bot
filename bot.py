@@ -64,16 +64,19 @@ JST = timezone(timedelta(hours=9), "JST")
 
 #=====辞書読込共通処理=====
 def load_data(data):
-    # reminders.jsonが存在すれば
-    if os.path.exists(f"/mnt/data/{data}.json"):
-        #fileオブジェクト変数に格納
-        with open(f"/mnt/data/{data}.json", "r", encoding = "utf-8") as file:
-            print(f"辞書ファイルを読込完了: {datetime.now(JST)} - {data}")
-            return json.load(file)
-    else:
-        #jsonが存在しない場合は、戻り値を空の辞書にする
+    try:
+        # reminders.jsonが存在すれば
+        if os.path.exists(f"/mnt/data/{data}.json"):
+            # fileオブジェクト変数に格納
+            with open(f"/mnt/data/{data}.json", "r", encoding = "utf-8") as file:
+                print(f"辞書ファイルを読込完了: {datetime.now(JST)} - {data}")
+                return json.load(file)
+        else:
+            #jsonが存在しない場合は、戻り値を空の辞書にする
+            return {}
+    except:
         return {}
-
+    
 #=====各辞書読込前処理=====
 #---リマインダー辞書---
 data_raw = load_data("reminders")
