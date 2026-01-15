@@ -123,6 +123,18 @@ except:
 
 print(f"dict make_list_channels: {make_list_channels}")
 
+#---録音中チャンネル辞書---
+data_raw = load_data("rec_channels")
+try:
+    if data_raw:
+        rec_channels = {key: value for key, value in data_raw.items()}
+    else:
+        rec_channels = {"channels": []}
+except:
+    rec_channels = {"channels": []}
+
+print(f"dict rec_channels: {rec_channels}")
+
 #===============
 # 共通処理関数
 #===============
@@ -170,8 +182,12 @@ def save_proxy_votes():
 def save_make_list_channels():
     export_data(make_list_channels, "make_list_channels")
 
+#---録音中チャンネル辞書---
+def save_rec_channels():
+    export_data(rec_channels, "rec_channels")
+
 #=====辞書への登録処理=====
-#---リマインダー---
+#---リマインダー辞書---
 def add_reminder(dt, repeat, interval, channel_id, msg):
     # 日時が辞書になければ辞書に行を追加
     if dt not in reminders:
@@ -186,7 +202,7 @@ def add_reminder(dt, repeat, interval, channel_id, msg):
     # json保存前処理
     save_reminders()
 
-#---投票---
+#---投票辞書---
 def add_vote(msg_id, question, reactions, options):
     # 辞書に項目を登録
     votes[msg_id] = {
@@ -198,7 +214,7 @@ def add_vote(msg_id, question, reactions, options):
     # json保存前処理
     save_votes()
 
-#---代理投票---
+#---代理投票辞書---
 def add_proxy_vote(msg_id, voter, agent_id, opt_idx):
     print("[start: add_proxy_vote]")
     # msg_idが辞書になければ辞書に行を追加
@@ -214,7 +230,7 @@ def add_proxy_vote(msg_id, voter, agent_id, opt_idx):
     # json保存前処理
     save_proxy_votes()
 
-#---リスト化対象チャンネル---
+#---リスト化対象チャンネル辞書---
 def add_make_list_channel(channel_id):
     # 辞書に項目を登録
     if channel_id not in make_list_channels["channels"]:
@@ -224,8 +240,18 @@ def add_make_list_channel(channel_id):
     # json保存前処理
     save_make_list_channels()
 
+#---録音中チャンネル辞書---
+def add_rec_channel(channel_id):
+    # 辞書に項目を登録
+    if channel_id not in rec_channels["channels"]:
+        rec_channels["channels"].append(channel_id)
+        print(f"rec_channels: {rec_channels}")
+
+    # json保存前処理
+    save_rec_channels()
+
 #=====辞書からの削除処理=====
-#---リマインダー---
+#---リマインダー辞書---
 def remove_reminder(dt, idx=None):
     # idxがNoneの場合は日時全体を削除、そうでなければ指定インデックスの行を削除
     if idx is None:
@@ -251,7 +277,7 @@ def remove_reminder(dt, idx=None):
             print(f"削除対象のリマインダーがありません")
             return None
 
-#---投票---
+#---投票辞書---
 def remove_vote(msg_id):
     print("[start: remove_vote]")
     if msg_id in votes:
@@ -264,7 +290,7 @@ def remove_vote(msg_id):
         print(f"削除対象の投票がありません")
         return None
         
-#---代理投票---
+#---代理投票辞書---
 def remove_proxy_vote(msg_id):
     print("[start: remove_proxy_vote]")
     if msg_id in proxy_votes:
@@ -277,7 +303,31 @@ def remove_proxy_vote(msg_id):
         print(f"削除対象の代理投票がありません")
         return None
 
-#---代理投票個別投票---
+#---リスト化対象チャンネル辞書---
+def remove_make_list_channel(channel_id, channel_name):
+    print("[start: remove_make_list_channel]")
+    if channel_id in make_list_channels["channels"]:
+        make_list_channels["channels"].remove(channel_id)
+        save_make_list_channels()
+        print(f"リスト化対象から削除: {channel_name}")
+        return channel_name
+    else:
+        print(f"削除対象のチャンネルがありません")
+        return None
+
+#---録音中チャンネル辞書---
+def remove_rec_channel(channel_id, channel_name):
+    print("[start: remove_rec_channel]")
+    if channel_id in rec_channels["channels"]:
+        rec_channels["channels"].remove(channel_id)
+        save_rec_channels()
+        print(f"リスト化対象から削除: {channel_name}")
+        return channel_name
+    else:
+        print(f"削除対象のチャンネルがありません")
+        return None
+
+#---代理投票辞書からの個別投票除外---
 def cancel_proxy_vote(msg_id, voter, agent_id):
     print("[start: cancel_proxy_vote]")
     if msg_id in proxy_votes:
@@ -293,18 +343,6 @@ def cancel_proxy_vote(msg_id, voter, agent_id):
                 return None
     else:
         print(f"キャンセル対象の代理投票がありません")
-        return None
-
-#---リスト化対象チャンネル---
-def remove_make_list_channel(channel_id, channel_name):
-    print("[start: remove_make_list_channel]")
-    if channel_id in make_list_channels["channels"]:
-        make_list_channels["channels"].remove(channel_id)
-        save_make_list_channels()
-        print(f"リスト化対象から削除: {channel_name}")
-        return channel_name
-    else:
-        print(f"削除対象のチャンネルがありません")
         return None
 
 #=====CSV作成処理=====
@@ -829,104 +867,44 @@ async def handle_make_list(message):
 #---------------
 # STT関係
 #---------------
+#=====vcログ作成=====
+def write_vc_log(user_name, contents, mode):
+    now = datetime.now(JST).strftime(
+
 #=====録音後処理=====
-async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextChannel, *args):
-    print("[start: after_recording]")
-    status_msg = await channel.send("🎙 データを整理してWatsonに送っているよ...")
-
-    all_results = []
-
+async def after_recording(sink, channel: discord.TextChannel, *args):
     for user_id, audio in sink.audio_data.items():
-        user = channel.guild.get_member(user_id) or await channel.guild.fetch_member(user_id)
-        user_name = user.nick or user.display_name
+        user = guild.get_user(user_id) or await bot.fetch_user(user_id)
         
-        start_time = getattr(audio, "first_packet", 0)
+        # userがbotなら無視
+        if user.bot:
+            print(f"skipping bot audio: {user.dislay_name}")
+            continue
         
         try:
-            # 1. 音声データの取得
+            # 音声変換
             audio.file.seek(0)
-            raw_data = audio.file.read()
-            if len(raw_data) <= 100: continue
-
-            # 2. pydubで読み込む
-            seg = AudioSegment.from_mp3(
-                io.BytesIO(raw_data),
-                sample_width=2,
-                frame_rate=48000,
-                channels=2
-            )
-
-            # --- 自動Bot判定セクション ---
-            # user.bot は Botアカウントなら True を返す便利な属性です
-            if user.bot:
-                print(f"🤖 Bot検出: {user_name} の音声を強力に抑制 (-35dB)")
-                seg = seg - 15
-                seg = effects.normalize(seg) # 割れた波形を可能な限り復元
-            else:
-                print(f"👤 人間検出: {user_name} の音声を最適化 (-3dB)")
-                seg = seg - 3 
-            # --------------------------
-
-            # 3. フォーマット変換（Watsonの好みに合わせる）
+            seg = AudioSegment.from_wav(io.BytesIO(audio.file.read())
             seg = seg.set_channels(1).set_frame_rate(16000)
-
-            # 4. 書き出し
-            out_buf = io.BytesIO()
-            seg.export(out_buf, format="wav")
-            out_buf.seek(0)
-            processed_data = out_buf.read()
-
-            # --- デバッグ用：実際に送っている音声ファイルを書き出す ---
-            debug_file = io.BytesIO(processed_data)
-            await channel.send(
-                content=f"🔍 Watson送信用データ確認 ({user_name})",
-                file=discord.File(debug_file, filename=f"debug_{user_id}.wav")
-            )
-            # ---------------------------------------------------
-
-            # この直後に stt.recognize(...) が続く
-
-            print(f"5: Watson解析リクエスト中... ({user_name})")
+            buf = io.BytesIO()
+            seg.export(buf, format="wav")
+            buf.seek(0)
             
+            # Watson解析実行
             res = stt.recognize(
-                audio=processed_data, 
-                # WaveSinkの標準である48kHz/2chステレオを明示
-                content_type="audio/wav", 
-                model="ja-JP_Multimedia",
-                smart_formatting=True
+                audio=buf.read(),
+                content_type="audio/wav",
+                model=ja-JP_Multimedia
             ).get_result()
-
-            # 3. 解析結果の処理
-            if res and "results" in res:
-                for result in res["results"]:
-                    rel_start = result.get("timestamp", 0)
-                    actual_start = start_time + rel_start
-                    transcript = result["alternatives"][0]["transcript"]
-                    
-                    all_results.append({
-                        "time": actual_start,
-                        "name": user_name,
-                        "text": transcript.strip()
-                    })
-                    print(f"DEBUG: {user_name} の発言: {transcript}")
-
+            
+            if res["results"]:
+                transcript = res["results"][0]["alternative"][0]["transcript"]
+            
+            # 共通ログ作成処理に送る
+            write_vc_log(user.display_name, transcript, mode="Voice")
+        
         except Exception as e:
-            print(f"⚠️ {user_name} の解析中にエラー: {e}")
-
-    # --- 並べ替えと送信 ---
-    all_results.sort(key=lambda x: x["time"])
-    transcripts = [f"{r['name']}: {r['text']}" for r in all_results]
-
-    if transcripts:
-        await status_msg.edit(content="文字起こし完了！")
-        text_content = "\n".join(transcripts)
-        file_buffer = io.BytesIO(text_content.encode('utf-8'))
-        await channel.send(file=discord.File(file_buffer, filename="transcript.txt"))
-    else:
-        await status_msg.edit(content="聞き取れる言葉が見つかりませんでした。音量が適切か確認してみてね。")
-
-    if channel.guild.voice_client:
-        await channel.guild.voice_client.disconnect()
+            print(f"error anlyzing voice from {user.display_name}: {e}")
 
 #===============
 # クラス定義
@@ -1196,18 +1174,22 @@ async def on_ready():
 @bot.event
 async def on_message(message):
     print("[start: on_message]")
+    
     # Botのメッセージは無視
     if message.author.bot:
         return
-
     # コマンドは無視
     if message.content.startswith("!"):
         await bot.process_commands(message)
         return
-
     # メッセージがリスト化対象チャンネルに投稿された場合、リスト化処理を行う
     if message.channel.id in make_list_channels["channels"]:
         await handle_make_list(message)
+    # 録音実施中かつ、
+    # メッセージが録音コマンド実行チャンネルに投稿された場合は、ログ化処理へ
+    vc = message.guild.voice_client
+    if vc and vc.recording and message.channel.id in rec_channel[message.guild.id]:
+        write_vc_log(message.author.display_name, message.content, mode="Text")
 
 #===============
 # コマンド定義
@@ -1600,7 +1582,7 @@ async def recstart(ctx):
 
     # 録音開始
     vc.start_recording(
-        discord.sinks.MP3Sink(),
+        discord.sinks.WaveSink(),
         after_recording,
         ctx.channel
     )
