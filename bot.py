@@ -126,6 +126,9 @@ except:
 
 print(f"dict make_list_channels: {make_list_channels}")
 
+#---録音セッション---
+rec_sessions = {}
+
 #===============
 # 共通処理関数
 #===============
