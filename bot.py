@@ -911,7 +911,7 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
     status_msg = await channel.send(f"{bot.user.display_name}が考え中…🤔")
 
     for user_id, audio in sink.audio_data.items():
-        user = guild.get_user(user_id) or await guild.fetch_user(user_id)
+        user = channel.guild.get_member(user_id) or await channel.guild.fetch_member(user_id)
         user_name = user.nick or user.display_name
         
         # userがbotなら無視
