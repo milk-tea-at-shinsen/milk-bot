@@ -889,7 +889,7 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
             print(f"5: Watson解析リクエスト中... ({user_name})")
             
             res = stt.recognize(
-                audio=raw_data, 
+                audio=processed_data, 
                 # WaveSinkの標準である48kHz/2chステレオを明示
                 content_type="audio/wav", 
                 model="ja-JP_Multimedia",
