@@ -127,7 +127,8 @@ except:
 print(f"dict make_list_channels: {make_list_channels}")
 
 #---録音セッション辞書---
-data_raw = load_data("rec_sessions")
+data_raw = {}
+#data_raw = load_data("rec_sessions")
 try:
     if data_raw:
         rec_sessions = {}
@@ -260,7 +261,7 @@ def add_rec_session(channel_id):
         rec_sessions[channel_id] = []
 
     # json保存前処理
-    save_rec_sessions()
+    #save_rec_sessions()
 
 #=====辞書からの削除処理=====
 #---リマインダー辞書---
@@ -332,7 +333,7 @@ def remove_rec_session(channel_id, channel_name):
     print("[start: remove_rec_sessions]")
     if channel_id in rec_sessions:
         del rec_sessions[channel_id]
-        save_rec_sessions()
+        #save_rec_sessions()
         print(f"{channel_name}の録音セッションを終了")
         return
     else:
