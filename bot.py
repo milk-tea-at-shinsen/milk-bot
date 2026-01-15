@@ -846,10 +846,15 @@ async def after_recording(sink: discord.sinks.WaveSink, channel: discord.TextCha
             # 1. 音声データの取得
             audio.file.seek(0)
             raw_data = audio.file.read()
-            if len(raw_data) <= 44: continue
+            if len(raw_data) <= 100: continue
 
             # 2. pydubで読み込む
-            seg = AudioSegment.from_wav(io.BytesIO(raw_data))
+            seg = AudioSegment.from_raw(
+                io.BytesIO(raw_data),
+                sample_width=2,
+                frame_rate=48000,
+                channels=2
+            )
 
             # --- 自動Bot判定セクション ---
             # user.bot は Botアカウントなら True を返す便利な属性です
@@ -1595,7 +1600,7 @@ async def recstart(ctx):
 
     # 録音開始
     vc.start_recording(
-        discord.sinks.WaveSink(),
+        discord.sinks.PCMSink(),
         after_recording,
         ctx.channel
     )
