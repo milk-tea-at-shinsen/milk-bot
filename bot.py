@@ -1600,7 +1600,7 @@ async def recstart(ctx):
 
     # 録音開始
     vc.start_recording(
-        discord.sinks.PCMSink(),
+        discord.sinks.MP3Sink(),
         after_recording,
         ctx.channel
     )
