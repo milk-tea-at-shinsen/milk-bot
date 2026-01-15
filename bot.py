@@ -877,7 +877,7 @@ async def handle_make_list(message):
 # STT関係
 #---------------
 #=====vcログ作成=====
-async def write_vc_log(channel_id, start_time):
+def write_vc_log(channel_id, start_time):
     print(["start: write_vc_log"])
 
     if channel_id in rec_sessions:
@@ -898,12 +898,6 @@ async def write_vc_log(channel_id, start_time):
         ]
         make_csv(filename, rows, meta, header)
         print(f"VCログを保存: {filename}")
-        
-        channel_name = bot.get_channel(channel_id).name
-        # 録音セッション辞書からチャンネルIDを削除
-        remove_rec_session(channel_id, channel_name)
-        # 録音セッション辞書を保存
-        save_rec_sessions()
         
         return filename
 
@@ -961,7 +955,13 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
     
     # discordに送信
     await status_msg.edit(content="VCのログのCSVだよ🫡", file=discord.File(filename))
-
+    
+    channel_name = bot.get_channel(channel_id).name
+    # 録音セッション辞書からチャンネルIDを削除
+    remove_rec_session(channel_id, channel_name)
+    # 録音セッション辞書を保存
+    save_rec_sessions()
+    
 #===============
 # クラス定義
 #===============
