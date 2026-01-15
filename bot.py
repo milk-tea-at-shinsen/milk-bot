@@ -140,6 +140,12 @@ try:
         rec_sessions = {}
 except:
     rec_sessions = {}
+    
+if os.path.exists("/mnt/data/rec_sessions.json"):
+    os.remove("/mnt/data/rec_sessions.json")
+    print("removed: rec_sessions.json")
+else:
+    print("not exist: rec_sessions.json")
 
 print(f"dict rec_sessions: {rec_sessions}")
 
@@ -964,7 +970,7 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
     # 録音セッション辞書からチャンネルIDを削除
     remove_rec_session(channel.id, channel.name)
     # 録音セッション辞書を保存
-    save_rec_sessions()
+    #save_rec_sessions()
     
 #===============
 # クラス定義
