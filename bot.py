@@ -908,6 +908,7 @@ def write_vc_log(channel_id, start_time):
 async def after_recording(sink, channel: discord.TextChannel, start_time: datetime, *args):
     print("[start: after_recording]")
     status_msg = await channel.send(f"{bot.user.display_name}が考え中…🤔")
+    await asyncio.sleep(2)
 
     for user_id, audio in sink.audio_data.items():
         user = channel.guild.get_member(user_id) or await channel.guild.fetch_member(user_id)
@@ -960,7 +961,7 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
     await status_msg.edit(content="VCのログのCSVだよ🫡", file=discord.File(filename))
     
     # 録音セッション辞書からチャンネルIDを削除
-    remove_rec_session(channel_id, channel.name)
+    remove_rec_session(channel.id, channel.name)
     # 録音セッション辞書を保存
     save_rec_sessions()
     
