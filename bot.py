@@ -126,29 +126,6 @@ except:
 
 print(f"dict make_list_channels: {make_list_channels}")
 
-#---録音セッション辞書---
-data_raw = {}
-#data_raw = load_data("rec_sessions")
-try:
-    if data_raw:
-        rec_sessions = {}
-        for key, value in data_raw.items():
-            rec_sessions[int(key)] = [
-                {**item, "time": datetime.fromisoformat(item["time"])} for item in value
-            ]
-    else:
-        rec_sessions = {}
-except:
-    rec_sessions = {}
-    
-if os.path.exists("/mnt/data/rec_sessions.json"):
-    os.remove("/mnt/data/rec_sessions.json")
-    print("removed: rec_sessions.json")
-else:
-    print("not exist: rec_sessions.json")
-
-print(f"dict rec_sessions: {rec_sessions}")
-
 #===============
 # 共通処理関数
 #===============
@@ -195,15 +172,6 @@ def save_proxy_votes():
 #---リスト化対象チャンネル---
 def save_make_list_channels():
     export_data(make_list_channels, "make_list_channels")
-
-#---録音セッション辞書---
-def save_rec_sessions():
-    rec_sessions_to_save = {}
-    for key, value in rec_sessions.items():
-        rec_sessions_to_save[key] = [
-            {**item, "time": item["time"].isoformat()} for item in value
-        ]
-    export_data(rec_sessions, "rec_sessions")
 
 #=====辞書への登録処理=====
 #---リマインダー辞書---
@@ -265,9 +233,6 @@ def add_rec_session(channel_id):
     # channel_idが辞書になければ辞書に行を追加
     if channel_id not in rec_sessions:
         rec_sessions[channel_id] = []
-
-    # json保存前処理
-    #save_rec_sessions()
 
 #=====辞書からの削除処理=====
 #---リマインダー辞書---
@@ -339,7 +304,6 @@ def remove_rec_session(channel_id, channel_name):
     print("[start: remove_rec_sessions]")
     if channel_id in rec_sessions:
         del rec_sessions[channel_id]
-        #save_rec_sessions()
         print(f"{channel_name}の録音セッションを終了")
         return
     else:
@@ -969,8 +933,6 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
     
     # 録音セッション辞書からチャンネルIDを削除
     remove_rec_session(channel.id, channel.name)
-    # 録音セッション辞書を保存
-    #save_rec_sessions()
     
 #===============
 # クラス定義
