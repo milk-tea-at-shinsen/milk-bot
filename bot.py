@@ -899,14 +899,13 @@ async def write_vc_log(channel_id, start_time):
         make_csv(filename, rows, meta, header)
         print(f"VCログを保存: {filename}")
         
-        # discordに送信
-        await interaction.followup.send(content="VCのログのCSVだよ🫡", file=discord.File(filename))
-        
         channel_name = bot.get_channel(channel_id).name
         # 録音セッション辞書からチャンネルIDを削除
         remove_rec_session(channel_id, channel_name)
         # 録音セッション辞書を保存
         save_rec_sessions()
+        
+        return filename
 
 #=====録音後処理=====
 async def after_recording(sink, channel: discord.TextChannel, start_time: datetime, *args):
@@ -958,7 +957,10 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
         except Exception as e:
             print(f"error anlyzing voice from {user.display_name}: {e}")
     
-    write_vc_log(channel.id, start_time)
+    filename = write_vc_log(channel.id, start_time)
+    
+    # discordに送信
+    await status_msg.edit(content="VCのログのCSVだよ🫡", file=discord.File(filename))
 
 #===============
 # クラス定義
