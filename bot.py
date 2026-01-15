@@ -1599,7 +1599,7 @@ async def recstart(ctx):
     # コマンド実行者がvc参加中の場合
     if ctx.author.voice:
         # botが既にvc参加していればエラーメッセージを返す
-        if ctx.voice_client and ctx.voice_client.reording:
+        if ctx.voice_client and ctx.voice_client.recording:
             await ctx.message.delete()
             return await ctx.send("⚠️いまは録音中だよ")
         # そうでなければコマンド実行者が参加中のvcに接続する
@@ -1620,7 +1620,7 @@ async def recstart(ctx):
     vc.start_recording(
         discord.sinks.WaveSink(),
         after_recording,
-        ctx.channel,
+        channel,
         start_time
     )
 
