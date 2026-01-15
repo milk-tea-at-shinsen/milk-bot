@@ -123,17 +123,21 @@ except:
 
 print(f"dict make_list_channels: {make_list_channels}")
 
-#---録音中チャンネル辞書---
-data_raw = load_data("rec_channels")
+#---録音セッション辞書---
+data_raw = load_data("rec_sessions")
 try:
     if data_raw:
-        rec_channels = {key: value for key, value in data_raw.items()}
+        rec_sessions = {}
+        for key, value in data_raw.items():
+            rec_sessions[int(key)] = [
+                {**item, "time": datetime.fromisoformat(item["time"])} for item in value
+            ]
     else:
-        rec_channels = {"channels": []}
+        rec_sessions = {}
 except:
-    rec_channels = {"channels": []}
+    rec_sessions = {}
 
-print(f"dict rec_channels: {rec_channels}")
+print(f"dict rec_sessions: {rec_sessions}")
 
 #===============
 # 共通処理関数
@@ -182,9 +186,14 @@ def save_proxy_votes():
 def save_make_list_channels():
     export_data(make_list_channels, "make_list_channels")
 
-#---録音中チャンネル辞書---
-def save_rec_channels():
-    export_data(rec_channels, "rec_channels")
+#---録音セッション辞書---
+def save_rec_sessions():
+    rec_sessions_to_save = {}
+    for key, value in rec_sessions.items():
+        rec_sessions_to_save[key] = [
+            {**item, "time": item["time"].isoformat()} for item in value
+        ]
+    export_data(rec_sessions, "rec_sessions")
 
 #=====辞書への登録処理=====
 #---リマインダー辞書---
@@ -240,15 +249,15 @@ def add_make_list_channel(channel_id):
     # json保存前処理
     save_make_list_channels()
 
-#---録音中チャンネル辞書---
-def add_rec_channel(channel_id):
-    # 辞書に項目を登録
-    if channel_id not in rec_channels["channels"]:
-        rec_channels["channels"].append(channel_id)
-        print(f"rec_channels: {rec_channels}")
+#---録音セッション辞書---
+def add_rec_session(channel_id):
+    print("[start: add_rec_session]")
+    # channel_idが辞書になければ辞書に行を追加
+    if channel_id not in rec_sessions:
+        rec_sessions[channel_id] = []
 
     # json保存前処理
-    save_rec_channels()
+    save_rec_sessions()
 
 #=====辞書からの削除処理=====
 #---リマインダー辞書---
@@ -315,17 +324,17 @@ def remove_make_list_channel(channel_id, channel_name):
         print(f"削除対象のチャンネルがありません")
         return None
 
-#---録音中チャンネル辞書---
-def remove_rec_channel(channel_id, channel_name):
-    print("[start: remove_rec_channel]")
-    if channel_id in rec_channels["channels"]:
-        rec_channels["channels"].remove(channel_id)
-        save_rec_channels()
-        print(f"リスト化対象から削除: {channel_name}")
-        return channel_name
+#---録音セッション辞書---
+def remove_rec_session(channel_id, channel_name):
+    print("[start: remove_rec_sessions]")
+    if channel_id in rec_sessions:
+        del rec_sessions[channel_id]
+        save_rec_sessions()
+        print(f"{channel_name}の録音セッションを終了")
+        return
     else:
-        print(f"削除対象のチャンネルがありません")
-        return None
+        print(f"{channel_name}の録音セッションがありません")
+        return
 
 #---代理投票辞書からの個別投票除外---
 def cancel_proxy_vote(msg_id, voter, agent_id):
@@ -868,23 +877,59 @@ async def handle_make_list(message):
 # STT関係
 #---------------
 #=====vcログ作成=====
-def write_vc_log(user_name, contents, mode):
-    now = datetime.now(JST).strftime(
+def write_vc_log(channel_id, start_time):
+    print(["start: write_vc_log"])
+
+    if channel_id in rec_sessions:
+        sessions = rec_sessions[channel_id]
+        # セッションを時間順にソート
+        sessions.sort(key=lambda x: x["time"])
+        
+        # CSVファイル作成
+        filename = f"/mnt/data/vc_log_{channel_id}_{start_time.strftime('%Y%m%d_%H%M%S')}.csv"
+        meta = {
+            "title": "vc_log",
+            "speeched_at": start_time.strftime("%Y/%m/%d %H:%M")
+        }
+        header = ["time", "name", "text"]
+        rows = [
+            [item["time"].strftime('%Y%m%d %H%M%S'), item["name"], item["text"]]
+            for item in sessions
+        ]
+        make_csv(filename, rows, meta, header)
+        print(f"VCログを保存: {filename}")
+        
+        channel_name = bot.get_channel(channel_id).name
+        # 録音セッション辞書からチャンネルIDを削除
+        remove_rec_session(channel_id, channel_name)
+        # 録音セッション辞書を保存
+        save_rec_sessions()
 
 #=====録音後処理=====
-async def after_recording(sink, channel: discord.TextChannel, *args):
+async def after_recording(sink, channel: discord.TextChannel, start_time: datetime, *args):
+    print("[start: after_recording]")
+    status_msg = await channel.send(f"{bot.user.display_name}が考え中…🤔")
+
     for user_id, audio in sink.audio_data.items():
-        user = guild.get_user(user_id) or await bot.fetch_user(user_id)
+        user = channel.guild.get_user(user_id) or await channel.guild.fetch_user(user_id)
+        user_name = user.nick or user.display_name
         
         # userがbotなら無視
         if user.bot:
-            print(f"skipping bot audio: {user.dislay_name}")
+            print(f"skipping bot audio: {user_name}")
             continue
         
+        # 開始時間の取得
+        rel_start_time = getattr(audio, "first_packet", 0)
+        if rel_start_time == 0:
+            rel_start_time = getattr(audio, "timestamp", 0)
+        
+        user_start_time = start_time + timedelta(seconds=rel_start_time)
+
         try:
             # 音声変換
             audio.file.seek(0)
-            seg = AudioSegment.from_wav(io.BytesIO(audio.file.read())
+            seg = AudioSegment.from_wav(io.BytesIO(audio.file.read()))
             seg = seg.set_channels(1).set_frame_rate(16000)
             buf = io.BytesIO()
             seg.export(buf, format="wav")
@@ -894,17 +939,23 @@ async def after_recording(sink, channel: discord.TextChannel, *args):
             res = stt.recognize(
                 audio=buf.read(),
                 content_type="audio/wav",
-                model=ja-JP_Multimedia
+                model="ja-JP_Multimedia"
             ).get_result()
             
-            if res["results"]:
-                transcript = res["results"][0]["alternative"][0]["transcript"]
-            
-            # 共通ログ作成処理に送る
-            write_vc_log(user.display_name, transcript, mode="Voice")
-        
+            if res and "results" in res:
+                for result in res["results"]:
+                    rel_start = result.get("timestamp", 0)
+                    actual_start = user_start_time + timedelta(seconds=rel_start)
+                    transcript = result["alternatives"][0]["transcript"]
+                    rec_sessions[channel.id].append({
+                        "time": actual_start,
+                        "name": user_name,
+                        "text": transcript.strip()
+                    })
         except Exception as e:
             print(f"error anlyzing voice from {user.display_name}: {e}")
+    
+    write_vc_log(channel.id, start_time)
 
 #===============
 # クラス定義
@@ -1178,18 +1229,24 @@ async def on_message(message):
     # Botのメッセージは無視
     if message.author.bot:
         return
-    # コマンドは無視
+    # コマンドは実行して終了
     if message.content.startswith("!"):
         await bot.process_commands(message)
         return
     # メッセージがリスト化対象チャンネルに投稿された場合、リスト化処理を行う
     if message.channel.id in make_list_channels["channels"]:
         await handle_make_list(message)
-    # 録音実施中かつ、
-    # メッセージが録音コマンド実行チャンネルに投稿された場合は、ログ化処理へ
+    # 録音実施中かつ、メッセージが録音実行チャンネルに投稿された場合は録音ログに追加
     vc = message.guild.voice_client
-    if vc and vc.recording and message.channel.id in rec_channel[message.guild.id]:
-        write_vc_log(message.author.display_name, message.content, mode="Text")
+    ts = message.created_at.astimezone(JST)
+    if vc and vc.recording and message.channel.id in rec_sessions:
+        rec_sessions[message.channel.id].append({
+            "time": ts,
+            "name": message.author.nick or message.author.display_name,
+            "text": message.content.strip()
+        })
+    # その他のコマンドは実行
+    await bot.process_commands(message)
 
 #===============
 # コマンド定義
@@ -1415,8 +1472,8 @@ async def export_members(ctx: discord.ApplicationContext):
     
     filename = f"/tmp/members_list_{datetime.now(JST).strftime('%Y%m%d_%H%M')}.csv"
     meta = {
-        "members_at": guild.name,
-        "collected_at": datetime.now(JST).strftime("%Y/%m/%d %H:%M")
+        "# members_at": guild.name,
+        "# collected_at": datetime.now(JST).strftime("%Y/%m/%d %H:%M")
     }
     header = ["user_id", "user_name", "display_name", "is_bot"]
     rows = [[member.id, member.name, member.nick or member.global_name, member.bot] async for member in guild.fetch_members(limit=None)]
@@ -1567,7 +1624,7 @@ async def recstart(ctx):
         # botが既にvc参加していればエラーメッセージを返す
         if ctx.voice_client and ctx.voice_client.reording:
             await ctx.message.delete()
-            await ctx.send("⚠️いまは録音中だよ")
+            return await ctx.send("⚠️いまは録音中だよ")
         # そうでなければコマンド実行者が参加中のvcに接続する
         else:
             channel = ctx.author.voice.channel
@@ -1578,14 +1635,21 @@ async def recstart(ctx):
     # コマンド実行者がvc参加していなければエラーメッセージを返す
     else:
         await ctx.message.delete()
-        await ctx.send("⚠️先にボイスチャンネルに参加してね")
+        return await ctx.send("⚠️先にボイスチャンネルに参加してね")
+
+    start_time = datetime.now(JST)
 
     # 録音開始
     vc.start_recording(
         discord.sinks.WaveSink(),
         after_recording,
-        ctx.channel
+        ctx.channel,
+        start_time
     )
+
+    # 録音セッション辞書にチャンネルIDを追加
+    add_rec_session(ctx.channel.id)
+
     await ctx.send("⏺録音を開始したよ🫡")
 
 #=====recstop コマンド=====
@@ -1597,6 +1661,7 @@ async def recstop(ctx):
         if vc.recording:
             await ctx.message.delete()
             vc.stop_recording()
+            await vc.disconnect()
         else:
             await ctx.message.delete()
             await ctx.send("⚠️いまは録音してないよ")
