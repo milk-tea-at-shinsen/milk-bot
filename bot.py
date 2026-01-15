@@ -877,7 +877,7 @@ async def handle_make_list(message):
 # STT関係
 #---------------
 #=====vcログ作成=====
-def write_vc_log(channel_id, start_time):
+async def write_vc_log(channel_id, start_time):
     print(["start: write_vc_log"])
 
     if channel_id in rec_sessions:
