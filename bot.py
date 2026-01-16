@@ -914,9 +914,12 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
             seg.export(buf, format="wav")
             buf.seek(0)
             
+            final_audio_data = buf.read()
+            print(f"final_size: {len(final_audio_data)}")
+            
             # Watson解析実行
             res = stt.recognize(
-                audio=buf.read(),
+                audio=final_audio_data,
                 content_type="audio/wav",
                 model="ja-JP_Multimedia"
             ).get_result()
