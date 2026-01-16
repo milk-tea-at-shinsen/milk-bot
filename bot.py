@@ -879,7 +879,7 @@ def make_summery(text):
 --- 会議ログ ---
 {text}
 """
-    response.text = gemini_client.models.generate_content(
+    response = gemini_client.models.generate_content(
         model="gemini-2.5-flash",
         contents=prompt
     )
