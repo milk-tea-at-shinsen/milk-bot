@@ -50,9 +50,6 @@ info = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
 credentials = service_account.Credentials.from_service_account_info(info)
 client = vision.ImageAnnotatorClient(credentials=credentials)
 
-#---Gemini API---
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
 #---Watson STT---
 WATSON_STT_API_KEY = os.getenv("WATSON_STT_API_KEY")
 WATSON_STT_URL = os.getenv("WATSON_STT_URL")
@@ -868,10 +865,13 @@ def make_summery(text):
     prompt = f"""
 以下は、Discordのボイスチャット会議のログです。
 次の通り、摘録を作成してください。
-- 表題は「VC会議摘録」としてください。
-- 冒頭に会議の開催日時と出席者を記録してください。
-- 次に、会議の議題を箇条書きで記録してください。
-- その後に、議題ごとに会議の要点をまとめて箇条書きで記録してください。
+--- 出力形式 ---
+ * json形式で出力してください
+ * キー及び値は次の通りとします
+  * "meta": 会議の概要(日時、参加者)
+  * "agenda": 会議の議題
+  * "summery": 会議の要約(箇条書きで記載)
+  * "decision": 決定事項
 
 --- 会議ログ ---
 {text}
@@ -975,10 +975,37 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
     
     filename = write_vc_log(channel.id, start_time)
     text = make_gemini_text(channel.id)
-    summerized_text = make_summery(text)
-    
+    summerized_row = make_summery(text)
+    summerized_dict = json.loads(summerized_row)
+
+    # embed作成
+    embed = discord.Embed(
+        title="VC会議摘録",
+        color=discord.Color.purple()
+    )
+    embed.add.field(
+        name="会議の概要",
+        value=summerized_dict["meta"],
+        inline=False
+    )
+    embed.add.field(
+        name="議題",
+        value=summerized_dict["agenda"],
+        inline=False
+    )
+    embed.add.field(
+        name="議事概要",
+        value=summerized_dict["summery"],
+        inline=False
+    )
+    embed.add.field(
+        name="決定事項",
+        value=summerized_dict["decision"],
+        inline=False
+    )
     # discordに送信
-    await status_msg.edit(content="VCのログを作成したよ🫡", file=discord.File(filename))
+    await status_msg.edit(embed=embed)
+    await channel.send(content="VCのログを作成したよ🫡", file=discord.File(filename))
     
     # 録音セッション辞書からチャンネルIDを削除
     remove_rec_session(channel.id, channel.name)
