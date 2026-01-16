@@ -13,26 +13,52 @@ from enum import Enum
 import csv, io
 from google.cloud import vision
 from google.oauth2 import service_account
+from google import genai
 import aiohttp
 import requests
 from functools import wraps
 import inspect
+from ibm_watson import SpeechToTextV1
+from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
+import ctypes
+import ctypes.util
+from pydub import AudioSegment, effects
 
 #=====Botの準備=====
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
+intents.voice_states = True
 bot = commands.Bot(command_prefix="!", intents=intents)
+print(f"Pycord version: {discord.__version__}")
+
+if not discord.opus.is_loaded():
+    try:
+        # Nixpacksが設定するライブラリパスの中からlibopusを探す
+        lib_path = ctypes.util.find_library('opus')
+        if lib_path:
+            discord.opus.load_opus(lib_path)
+        else:
+            # 見つからない場合の「決め打ち」パス（Nixpacksの標準的な配置）
+            discord.opus.load_opus('/usr/lib/libopus.so.0')
+    except Exception as e:
+        print(f"Opus loading error: {e}")
 
 #=====サービスアカウントキーの読込=====
 #---Vision API---
 info = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
 credentials = service_account.Credentials.from_service_account_info(info)
-client = vision.ImageAnnotatorClient(credentials=credentials)
+vision_client = vision.ImageAnnotatorClient(credentials=credentials)
+
+#---Gemini API---
+gemini_client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
 #---Watson STT---
 WATSON_STT_API_KEY = os.getenv("WATSON_STT_API_KEY")
 WATSON_STT_URL = os.getenv("WATSON_STT_URL")
+authenticator = IAMAuthenticator(WATSON_STT_API_KEY)
+stt = SpeechToTextV1(authenticator=authenticator)
+stt.set_service_url(WATSON_STT_URL)
 
 #===================================
 # 定数・グローバル変数・辞書の準備
@@ -42,16 +68,19 @@ JST = timezone(timedelta(hours=9), "JST")
 
 #=====辞書読込共通処理=====
 def load_data(data):
-    # reminders.jsonが存在すれば
-    if os.path.exists(f"/mnt/data/{data}.json"):
-        #fileオブジェクト変数に格納
-        with open(f"/mnt/data/{data}.json", "r", encoding = "utf-8") as file:
-            print(f"辞書ファイルを読込完了: {datetime.now(JST)} - {data}")
-            return json.load(file)
-    else:
-        #jsonが存在しない場合は、戻り値を空の辞書にする
+    try:
+        # reminders.jsonが存在すれば
+        if os.path.exists(f"/mnt/data/{data}.json"):
+            # fileオブジェクト変数に格納
+            with open(f"/mnt/data/{data}.json", "r", encoding = "utf-8") as file:
+                print(f"辞書ファイルを読込完了: {datetime.now(JST)} - {data}")
+                return json.load(file)
+        else:
+            #jsonが存在しない場合は、戻り値を空の辞書にする
+            return {}
+    except:
         return {}
-
+    
 #=====各辞書読込前処理=====
 #---リマインダー辞書---
 data_raw = load_data("reminders")
@@ -101,6 +130,9 @@ except:
 
 print(f"dict make_list_channels: {make_list_channels}")
 
+#---録音セッション---
+rec_sessions = {}
+
 #===============
 # 共通処理関数
 #===============
@@ -149,7 +181,7 @@ def save_make_list_channels():
     export_data(make_list_channels, "make_list_channels")
 
 #=====辞書への登録処理=====
-#---リマインダー---
+#---リマインダー辞書---
 def add_reminder(dt, repeat, interval, channel_id, msg):
     # 日時が辞書になければ辞書に行を追加
     if dt not in reminders:
@@ -164,7 +196,7 @@ def add_reminder(dt, repeat, interval, channel_id, msg):
     # json保存前処理
     save_reminders()
 
-#---投票---
+#---投票辞書---
 def add_vote(msg_id, question, reactions, options):
     # 辞書に項目を登録
     votes[msg_id] = {
@@ -176,7 +208,7 @@ def add_vote(msg_id, question, reactions, options):
     # json保存前処理
     save_votes()
 
-#---代理投票---
+#---代理投票辞書---
 def add_proxy_vote(msg_id, voter, agent_id, opt_idx):
     print("[start: add_proxy_vote]")
     # msg_idが辞書になければ辞書に行を追加
@@ -192,7 +224,7 @@ def add_proxy_vote(msg_id, voter, agent_id, opt_idx):
     # json保存前処理
     save_proxy_votes()
 
-#---リスト化対象チャンネル---
+#---リスト化対象チャンネル辞書---
 def add_make_list_channel(channel_id):
     # 辞書に項目を登録
     if channel_id not in make_list_channels["channels"]:
@@ -202,8 +234,15 @@ def add_make_list_channel(channel_id):
     # json保存前処理
     save_make_list_channels()
 
+#---録音セッション辞書---
+def add_rec_session(channel_id):
+    print("[start: add_rec_session]")
+    # channel_idが辞書になければ辞書に行を追加
+    if channel_id not in rec_sessions:
+        rec_sessions[channel_id] = []
+
 #=====辞書からの削除処理=====
-#---リマインダー---
+#---リマインダー辞書---
 def remove_reminder(dt, idx=None):
     # idxがNoneの場合は日時全体を削除、そうでなければ指定インデックスの行を削除
     if idx is None:
@@ -229,7 +268,7 @@ def remove_reminder(dt, idx=None):
             print(f"削除対象のリマインダーがありません")
             return None
 
-#---投票---
+#---投票辞書---
 def remove_vote(msg_id):
     print("[start: remove_vote]")
     if msg_id in votes:
@@ -242,7 +281,7 @@ def remove_vote(msg_id):
         print(f"削除対象の投票がありません")
         return None
         
-#---代理投票---
+#---代理投票辞書---
 def remove_proxy_vote(msg_id):
     print("[start: remove_proxy_vote]")
     if msg_id in proxy_votes:
@@ -255,7 +294,30 @@ def remove_proxy_vote(msg_id):
         print(f"削除対象の代理投票がありません")
         return None
 
-#---代理投票個別投票---
+#---リスト化対象チャンネル辞書---
+def remove_make_list_channel(channel_id, channel_name):
+    print("[start: remove_make_list_channel]")
+    if channel_id in make_list_channels["channels"]:
+        make_list_channels["channels"].remove(channel_id)
+        save_make_list_channels()
+        print(f"リスト化対象から削除: {channel_name}")
+        return channel_name
+    else:
+        print(f"削除対象のチャンネルがありません")
+        return None
+
+#---録音セッション辞書---
+def remove_rec_session(channel_id, channel_name):
+    print("[start: remove_rec_sessions]")
+    if channel_id in rec_sessions:
+        del rec_sessions[channel_id]
+        print(f"{channel_name}の録音セッションを終了")
+        return
+    else:
+        print(f"{channel_name}の録音セッションがありません")
+        return
+
+#---代理投票辞書からの個別投票除外---
 def cancel_proxy_vote(msg_id, voter, agent_id):
     print("[start: cancel_proxy_vote]")
     if msg_id in proxy_votes:
@@ -271,18 +333,6 @@ def cancel_proxy_vote(msg_id, voter, agent_id):
                 return None
     else:
         print(f"キャンセル対象の代理投票がありません")
-        return None
-
-#---リスト化対象チャンネル---
-def remove_make_list_channel(channel_id, channel_name):
-    print("[start: remove_make_list_channel]")
-    if channel_id in make_list_channels["channels"]:
-        make_list_channels["channels"].remove(channel_id)
-        save_make_list_channels()
-        print(f"リスト化対象から削除: {channel_name}")
-        return channel_name
-    else:
-        print(f"削除対象のチャンネルがありません")
         return None
 
 #=====CSV作成処理=====
@@ -387,7 +437,7 @@ def reaction_replace(options, reactions):
     return options, reactions
 
 #=====投票選択肢embed作成=====
-def make_embed_text(options, reactions, question, description):
+def make_poll_embed(options, reactions, question, description):
     for i, opt in enumerate(options):
         if opt:
             description += f"{reactions[i]} {opt}\n"
@@ -753,7 +803,7 @@ async def extract_table_from_image(image_content):
     # Vision APIをスレッドで実行
     response = await loop.run_in_executor(
         None,
-        lambda: client.document_text_detection(image=image)
+        lambda: vision_client.document_text_detection(image=image)
     )
 
     # symbolsを取得
@@ -804,6 +854,164 @@ async def handle_make_list(message):
     
     await message.delete()
 
+#---------------
+# STT関係
+#---------------
+#=====要約用テキスト作成=====
+def make_gemini_text(channel_id):
+    lines = [f"{item['time'].strftime('%Y/%m/%d %H:%M:%S')} {item['name']}: {item['text']}" for item in rec_sessions[channel_id]]
+    text = "\n".join(lines)
+    return text
+    
+#=====要約作成=====
+def make_summery(text):
+    prompt = f"""
+以下は、Discordのボイスチャット会議のログです。
+内容を分析し、以下のガイドラインに従って議事録を作成してください。
+
+--- 前提条件 ---
+- あなたはプロの議事録作成アシスタントです
+- 会議の内容を正確に把握し、要点を簡潔にまとめてください
+- 音声認識による誤認識の可能性や、話し手による言い間違いの可能性も考慮し、文脈から正しい内容を推測してください
+- 出力は指定した4項目の見出しと、その内容のみとし、前置きや結びの言葉、メタ情報などは一切含めないでください
+- 4項目の順番は入れ替えないでください
+- 全体の文字数は、Markdown記法や空白などを含めて最大4000文字以内に収めてください
+
+--- 出力内容 ---
+#### 会議概要
+- 日時、参加者を記載
+#### 議題
+- 会議の主なテーマを記載
+#### 議事概要
+- 議事内容を構造化し、要約して箇条書きで記載
+#### 決定事項
+- 合意・決定した事項や次回までの検討事項を記載
+- 該当がない場合は「特になし」と記載
+
+--- 出力フォーマット ---
+- Markdown記法で記載してください
+- 見出しのレベルは####を使用し、####の後に半角スペースを入れてください
+- 箇条書きには-を使用し、-の後に半角スペースを入れてください
+- コードブロック(```)は使用しないでください
+
+--- 会議ログ ---
+{text}
+"""
+    response = gemini_client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt
+    )
+    return response.text
+
+#=====vcログ作成=====
+def write_vc_log(channel_id, start_time):
+    print("[start: write_vc_log]")
+
+    if channel_id in rec_sessions:
+        sessions = rec_sessions[channel_id]
+        # セッションを時間順にソート
+        sessions.sort(key=lambda x: x["time"])
+        
+        # CSVファイル作成
+        filename = f"/mnt/data/vc_log_{channel_id}_{start_time.strftime('%Y%m%d_%H%M%S')}.csv"
+        meta = {
+            "title": "vc_log",
+            "speeched_at": start_time.strftime("%Y/%m/%d %H:%M")
+        }
+        header = ["time", "name", "text"]
+        rows = [
+            [item["time"].strftime("%Y/%m/%d %H:%M:%S"), item["name"], item["text"]]
+            for item in sessions
+        ]
+        make_csv(filename, rows, meta, header)
+        print(f"VCログを保存: {filename}")
+        
+        return filename
+
+#=====録音後処理=====
+async def after_recording(sink, channel: discord.TextChannel, start_time: datetime, *args):
+    print("[start: after_recording]")
+    status_msg = await channel.send(f"{bot.user.display_name}が考え中…🤔")
+    await asyncio.sleep(2)
+
+    for user_id, audio in sink.audio_data.items():
+        user = channel.guild.get_member(user_id) or await channel.guild.fetch_member(user_id)
+        user_name = user.nick or user.display_name
+
+        # userがbotなら無視
+        if user.bot:
+            print(f"skipping bot audio: {user_name}")
+            continue
+        
+        # 開始時間の取得
+        rel_start_time = getattr(audio, "first_packet", 0)
+        if rel_start_time == 0:
+            rel_start_time = getattr(audio, "timestamp", 0)
+        
+        user_start_time = start_time + timedelta(seconds=rel_start_time)
+
+        try:
+            # 音声変換
+            audio.file.seek(0)
+            raw_bytes = audio.file.read()
+            seg = AudioSegment.from_raw(
+                io.BytesIO(raw_bytes),
+                sample_width=2,
+                frame_rate=48000,
+                channels=2
+            )
+            seg = seg.set_channels(1).set_frame_rate(16000)
+            buf = io.BytesIO()
+            seg.export(buf, format="wav")
+            buf.seek(0)
+            
+            final_audio_data = buf.read()
+            
+            # Watson解析実行
+            res = stt.recognize(
+                audio=final_audio_data,
+                content_type="audio/wav",
+                model="ja-JP_Multimedia",
+                timestamps=True
+            ).get_result()
+            
+            print(f"res: {res}")
+            
+            if res and "results" in res:
+                for result in res["results"]:
+                    rel_start = result["alternatives"][0]["timestamps"][0][1]
+                    actual_start = user_start_time + timedelta(seconds=rel_start)
+                    transcript = result["alternatives"][0]["transcript"]
+                    
+                    print(f"DEBUG: rel_start={rel_start} (type: {type(rel_start)})", flush=True)
+                    print(f"DEBUG: actual_start={actual_start}", flush=True)
+                    
+                    rec_sessions[channel.id].append({
+                        "time": actual_start,
+                        "name": user_name,
+                        "text": transcript.strip()
+                    })
+        except Exception as e:
+            print(f"error anlyzing voice from {user.display_name}: {e}")
+    
+    filename = write_vc_log(channel.id, start_time)
+    text = make_gemini_text(channel.id)
+    summerized_text = make_summery(text)
+    print(f"summerized_text: {summerized_text}")
+
+    # embed作成
+    embed = discord.Embed(
+        title="VC会議摘録",
+        description=summerized_text,
+        color=discord.Color.purple()
+    )
+    # discordに送信
+    await status_msg.edit(content="", embed=embed)
+    await channel.send(content="VCのログを作成したよ🫡", file=discord.File(filename))
+    
+    # 録音セッション辞書からチャンネルIDを削除
+    remove_rec_session(channel.id, channel.name)
+    
 #===============
 # クラス定義
 #===============
@@ -1033,7 +1241,7 @@ class AddOptionInput(discord.ui.Modal):
         # embedを書き換え
         question = votes[self.msg_id]["question"]
         description = ""
-        embed = make_embed_text(options, reactions, question, description)
+        embed = make_poll_embed(options, reactions, question, description)
 
         # embedを表示
         message = await interaction.channel.fetch_message(self.msg_id)
@@ -1056,24 +1264,6 @@ class VoteSelectMode(Enum):
     ADD_OPTION = "add_option"
     DELETE_VOTE = "delete_vote"
 
-#===============
-# STT関係
-#===============
-#=====録音=====
-class OpusRecorder:
-    # クラスの初期設定
-    def __init__(self, *args, **kwargs):
-        self.data = bytearray()
-
-    # 録音開始時
-    def write(self, data, filename):
-        self.data.extend(data)
-        self.filename = filename
-
-    # 録音終了時
-    def get_opus(self):
-        return bytes(self.data)
-
 #====================
 # イベントハンドラ
 #====================
@@ -1090,18 +1280,28 @@ async def on_ready():
 @bot.event
 async def on_message(message):
     print("[start: on_message]")
+    
     # Botのメッセージは無視
     if message.author.bot:
         return
-
-    # コマンドは無視
+    # コマンドは実行して終了
     if message.content.startswith("!"):
         await bot.process_commands(message)
         return
-
     # メッセージがリスト化対象チャンネルに投稿された場合、リスト化処理を行う
     if message.channel.id in make_list_channels["channels"]:
         await handle_make_list(message)
+    # 録音実施中かつ、メッセージが録音実行チャンネルに投稿された場合は録音ログに追加
+    vc = message.guild.voice_client
+    ts = message.created_at.astimezone(JST)
+    if vc and vc.recording and message.channel.id in rec_sessions:
+        rec_sessions[message.channel.id].append({
+            "time": ts,
+            "name": message.author.nick or message.author.display_name,
+            "text": message.content.strip()
+        })
+    # その他のコマンドは実行
+    await bot.process_commands(message)
 
 #===============
 # コマンド定義
@@ -1223,7 +1423,7 @@ async def vote(ctx: discord.ApplicationContext,
     description = ""
 
     # Embedで出力
-    embed = make_embed_text(options, reactions, question, description)
+    embed = make_poll_embed(options, reactions, question, description)
     await ctx.interaction.response.send_message(embed=embed)
     
     # リアクションを追加
@@ -1327,8 +1527,8 @@ async def export_members(ctx: discord.ApplicationContext):
     
     filename = f"/tmp/members_list_{datetime.now(JST).strftime('%Y%m%d_%H%M')}.csv"
     meta = {
-        "members_at": guild.name,
-        "collected_at": datetime.now(JST).strftime("%Y/%m/%d %H:%M")
+        "# members_at": guild.name,
+        "# collected_at": datetime.now(JST).strftime("%Y/%m/%d %H:%M")
     }
     header = ["user_id", "user_name", "display_name", "is_bot"]
     rows = [[member.id, member.name, member.nick or member.global_name, member.bot] async for member in guild.fetch_members(limit=None)]
@@ -1468,50 +1668,44 @@ async def remove_from_list(ctx: discord.ApplicationContext, message: discord.Mes
     else:
         await ctx.interaction.response.send_message(content=f"️⚠️リストの項目以外は削除できないよ", ephemeral=True)
 
-#====================
+#---------------
 # STT関係
-#====================
-#=====join コマンド=====
-@bot.command(name="join")
-async def join(ctx):
+#---------------
+#=====recstart コマンド=====
+@bot.command(name="recstart")
+async def recstart(ctx):
     # コマンド実行者がvc参加中の場合
     if ctx.author.voice:
         # botが既にvc参加していればエラーメッセージを返す
-        if ctx.voice_client:
+        if ctx.voice_client and ctx.voice_client.recording:
             await ctx.message.delete()
-            await ctx.send("⚠️すでにボイスチャンネルに接続してるよ")
+            return await ctx.send("⚠️いまは録音中だよ")
         # そうでなければコマンド実行者が参加中のvcに接続する
         else:
             channel = ctx.author.voice.channel
             await ctx.message.delete()
             await channel.connect()
-            await ctx.send(f"{channel.name}に接続したよ🫡")
+            vc = ctx.voice_client
+
     # コマンド実行者がvc参加していなければエラーメッセージを返す
     else:
         await ctx.message.delete()
-        await ctx.send("⚠️先にボイスチャンネルに参加してね")
+        return await ctx.send("⚠️先にボイスチャンネルに参加してね")
 
-#=====recstart コマンド=====
-@bot.command(name="recstart")
-async def recstart(ctx):
-    vc = ctx.voice_client
-    # botがvcに参加している場合
-    if vc:
-        # ファイル名を作成
-        ts = datetime.now(JST).strftime("%Y%m%d_%H%M")
-        filename = f"/tmp/vc_{ts}.opus"
-        vc.recording_file = filename
-        
-        # 録音開始
-        recorder = OpusRecorder(filename)
-        vc.listen(recorder)
+    start_time = datetime.now(JST)
 
-        await ctx.message.delete()
-        await ctx.send("⏺録音を開始したよ🫡")
+    # 録音開始
+    vc.start_recording(
+        discord.sinks.WaveSink(),
+        after_recording,
+        channel,
+        start_time
+    )
 
-    else:
-        await ctx.message.delete()
-        await ctx.send("⚠️先に`!join`を実行してね")
+    # 録音セッション辞書にチャンネルIDを追加
+    add_rec_session(ctx.channel.id)
+
+    await ctx.send("⏺録音を開始したよ🫡")
 
 #=====recstop コマンド=====
 @bot.command(name="recstop")
@@ -1519,34 +1713,14 @@ async def recstop(ctx):
     vc = ctx.voice_client
     # botがvcに参加している場合
     if vc:
-        vc.stop_listening()
-        filename = OpusRecorder.filename
-        
-        if filename:
-            # 録音データが存在する場合、Watson APIに渡すデータを作成
-            await ctx.send("⏹録音停止！文字起こしを始めるよ🫡")
-            with open(filename, "rb") as f:
-                audio = f.read()
-            headers = {"Content-Type": "audio/ogg"}
-            auth = ("apikey", WATSON_STT_API_KEY)
-    
-            # Watson APIにデータを渡してjsonファイルを受け取る
-            response = requests.post(
-                WATSON_STT_URL,
-                headers=headers,
-                data=audio,
-                auth=auth
-            )
-
-            # jsonファイルをテキスト化
-            result = response.json()
-            text = result.get("results", [{}])[0].get("alternatives", [{}])[0].get("transcript", "")
-            # テキストファイルを保存
-            filename = filename.replace("opus", "txt")
-            with open(filename, "w", encoding="utf-8-sig") as f:
-                f.write(text)
-            
-            await ctx.send(f"文字起こしが終わったよ🫡",file=discord.File(filename))
+        if vc.recording:
+            await ctx.message.delete()
+            vc.stop_recording()
+            await vc.disconnect()
+        else:
+            await ctx.message.delete()
+            await ctx.send("⚠️いまは録音してないよ")
 
 # Botを起動
+
 bot.run(os.getenv("DISCORD_TOKEN"))
