@@ -921,7 +921,8 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
             res = stt.recognize(
                 audio=final_audio_data,
                 content_type="audio/wav",
-                model="ja-JP_Multimedia"
+                model="ja-JP_Multimedia",
+                timestamps=True
             ).get_result()
             
             if res and "results" in res:
