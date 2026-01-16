@@ -925,6 +925,8 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
                 timestamps=True
             ).get_result()
             
+            print(f"res: {res}")
+            
             if res and "results" in res:
                 for result in res["results"]:
                     rel_start = result.get("timestamp", 0)
