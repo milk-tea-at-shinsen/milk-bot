@@ -888,6 +888,9 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
         user = channel.guild.get_member(user_id) or await channel.guild.fetch_member(user_id)
         user_name = user.nick or user.display_name
         
+        print(f"Sink Type: {type(sink)}")
+        print(f"Audio Data Length: {len(sink.audio_data)}")
+        
         # userがbotなら無視
         if user.bot:
             print(f"skipping bot audio: {user_name}")
