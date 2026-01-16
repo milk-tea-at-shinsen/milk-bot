@@ -48,7 +48,10 @@ if not discord.opus.is_loaded():
 #---Vision API---
 info = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
 credentials = service_account.Credentials.from_service_account_info(info)
-client = vision.ImageAnnotatorClient(credentials=credentials)
+vision_client = vision.ImageAnnotatorClient(credentials=credentials)
+
+#---Gemini API---
+gemini_client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
 #---Watson STT---
 WATSON_STT_API_KEY = os.getenv("WATSON_STT_API_KEY")
@@ -800,7 +803,7 @@ async def extract_table_from_image(image_content):
     # Vision APIをスレッドで実行
     response = await loop.run_in_executor(
         None,
-        lambda: client.document_text_detection(image=image)
+        lambda: vision_client.document_text_detection(image=image)
     )
 
     # symbolsを取得
@@ -876,7 +879,7 @@ def make_summery(text):
 --- 会議ログ ---
 {text}
 """
-    response = client.models.generate_content(
+    response = gemini_client.models.generate_content(
         model="gemini-2.5-flash",
         contents=prompt
     )
