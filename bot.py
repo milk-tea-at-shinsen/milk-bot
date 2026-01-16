@@ -869,21 +869,21 @@ def make_summery(text):
 以下は、Discordのボイスチャット会議のログです。
 次の通り、摘録を作成してください。
 --- 出力形式 ---
- * json形式で出力してください
- * キー及び値は次の通りとします
-  * "meta": 会議の概要(日時、参加者)
-  * "agenda": 会議の議題
-  * "summery": 会議の要約(箇条書きで記載)
-  * "decision": 決定事項
+* Markdown記法で記載してください
+* 見出しは次の項目及び内容とし、Geminiからのコメントやメタ情報などは出力に含めないでください
+  * 会議概要: 日時、参加者を記載
+  * 議題: 議事の議題を記載
+  * 議事概要: 議事内容を要約して箇条書きで記載
+  * 決定事項: 決定した事項があれば記載
 
 --- 会議ログ ---
 {text}
 """
-    response = gemini_client.models.generate_content(
+    response.text = gemini_client.models.generate_content(
         model="gemini-2.5-flash",
         contents=prompt
     )
-    return response
+    return response.text
 
 #=====vcログ作成=====
 def write_vc_log(channel_id, start_time):
@@ -978,34 +978,14 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
     
     filename = write_vc_log(channel.id, start_time)
     text = make_gemini_text(channel.id)
-    summerized_row = make_summery(text)
-    print(f"summerized_row: {summerized_row}")
-    summerized_dict = json.loads(summerized_row)
+    summerized_text = make_summery(text)
+    print(f"summerized_text: {summerized_text}")
 
     # embed作成
     embed = discord.Embed(
         title="VC会議摘録",
+        description=summerized_text,
         color=discord.Color.purple()
-    )
-    embed.add.field(
-        name="会議の概要",
-        value=summerized_dict["meta"],
-        inline=False
-    )
-    embed.add.field(
-        name="議題",
-        value=summerized_dict["agenda"],
-        inline=False
-    )
-    embed.add.field(
-        name="議事概要",
-        value=summerized_dict["summery"],
-        inline=False
-    )
-    embed.add.field(
-        name="決定事項",
-        value=summerized_dict["decision"],
-        inline=False
     )
     # discordに送信
     await status_msg.edit(embed=embed)
