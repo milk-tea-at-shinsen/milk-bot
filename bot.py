@@ -979,6 +979,7 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
     filename = write_vc_log(channel.id, start_time)
     text = make_gemini_text(channel.id)
     summerized_row = make_summery(text)
+    print(f"summerized_row: {summerized_row}")
     summerized_dict = json.loads(summerized_row)
 
     # embed作成
