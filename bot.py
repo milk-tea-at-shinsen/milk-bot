@@ -891,7 +891,7 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
         audio_bytes = audio.file.getvalue()
         print(f"Sink Type: {type(sink)}")
         print(f"Audio Data Length: {len(sink.audio_data)}")
-        print(f"User: {user_name} | Size: {audio_bytes} bytes")
+        print(f"User: {user_name} | Size: {len(audio_bytes)} bytes")
         
         # userがbotなら無視
         if user.bot:
