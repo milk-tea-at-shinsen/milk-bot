@@ -929,7 +929,7 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
             
             if res and "results" in res:
                 for result in res["results"]:
-                    rel_start = result.get(result["alternatives"][0]["timestamps"][0][1], 0)
+                    rel_start = result["alternatives"][0]["timestamps"][0][1]
                     actual_start = user_start_time + timedelta(seconds=rel_start)
                     transcript = result["alternatives"][0]["transcript"]
                     
