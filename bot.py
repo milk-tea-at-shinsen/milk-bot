@@ -870,7 +870,7 @@ def write_vc_log(channel_id, start_time):
         }
         header = ["time", "name", "text"]
         rows = [
-            [item["time"].strftime('%Y%m%d %H%M%S'), item["name"], item["text"]]
+            [item["time"].strftime('%Y/%m/%d %H:%M:%S'), item["name"], item["text"]]
             for item in sessions
         ]
         make_csv(filename, rows, meta, header)
@@ -882,17 +882,12 @@ def write_vc_log(channel_id, start_time):
 async def after_recording(sink, channel: discord.TextChannel, start_time: datetime, *args):
     print("[start: after_recording]")
     status_msg = await channel.send(f"{bot.user.display_name}が考え中…🤔")
-    await asyncio.sleep(5)
+    await asyncio.sleep(2)
 
     for user_id, audio in sink.audio_data.items():
         user = channel.guild.get_member(user_id) or await channel.guild.fetch_member(user_id)
         user_name = user.nick or user.display_name
-        
-        audio_bytes = audio.file.getvalue()
-        print(f"Sink Type: {type(sink)}")
-        print(f"Audio Data Length: {len(sink.audio_data)}")
-        print(f"User: {user_name} | Size: {len(audio_bytes)} bytes")
-        
+
         # userがbotなら無視
         if user.bot:
             print(f"skipping bot audio: {user_name}")
@@ -909,22 +904,18 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
             # 音声変換
             audio.file.seek(0)
             raw_bytes = audio.file.read()
-            print(f"raw_bytes: {len(raw_bytes)}")
-            #seg = AudioSegment.from_file(io.BytesIO(raw_bytes), format="wav")
             seg = AudioSegment.from_raw(
                 io.BytesIO(raw_bytes),
                 sample_width=2,
                 frame_rate=48000,
                 channels=2
             )
-            print(f"seg_duration: {seg.duration_seconds}")
             seg = seg.set_channels(1).set_frame_rate(16000)
             buf = io.BytesIO()
             seg.export(buf, format="wav")
             buf.seek(0)
             
             final_audio_data = buf.read()
-            print(f"final_size: {len(final_audio_data)}")
             
             # Watson解析実行
             res = stt.recognize(
