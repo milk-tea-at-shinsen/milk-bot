@@ -882,14 +882,16 @@ def write_vc_log(channel_id, start_time):
 async def after_recording(sink, channel: discord.TextChannel, start_time: datetime, *args):
     print("[start: after_recording]")
     status_msg = await channel.send(f"{bot.user.display_name}が考え中…🤔")
-    await asyncio.sleep(2)
+    await asyncio.sleep(5)
 
     for user_id, audio in sink.audio_data.items():
         user = channel.guild.get_member(user_id) or await channel.guild.fetch_member(user_id)
         user_name = user.nick or user.display_name
         
+        audio_bytes = audio.file.getvalue()
         print(f"Sink Type: {type(sink)}")
         print(f"Audio Data Length: {len(sink.audio_data)}")
+        print(f"User: {user_name} | Size: {audio_bytes} bytes")
         
         # userがbotなら無視
         if user.bot:
