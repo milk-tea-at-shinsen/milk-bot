@@ -910,7 +910,13 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
             audio.file.seek(0)
             raw_bytes = audio.file.read()
             print(f"raw_bytes: {len(raw_bytes)}")
-            seg = AudioSegment.from_file(io.BytesIO(raw_bytes), format="wav")
+            #seg = AudioSegment.from_file(io.BytesIO(raw_bytes), format="wav")
+            seg = AudioSegment.from_raw(
+                io.BytesIO(raw_bytes),
+                sample_width=2,
+                frame_rate=48000,
+                channels=2
+            )
             print(f"seg_duration: {seg.duration_seconds}")
             seg = seg.set_channels(1).set_frame_rate(16000)
             buf = io.BytesIO()
