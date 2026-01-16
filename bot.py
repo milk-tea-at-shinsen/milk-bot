@@ -13,6 +13,7 @@ from enum import Enum
 import csv, io
 from google.cloud import vision
 from google.oauth2 import service_account
+from google import genai
 import aiohttp
 import requests
 from functools import wraps
@@ -48,6 +49,9 @@ if not discord.opus.is_loaded():
 info = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
 credentials = service_account.Credentials.from_service_account_info(info)
 client = vision.ImageAnnotatorClient(credentials=credentials)
+
+#---Gemini API---
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 #---Watson STT---
 WATSON_STT_API_KEY = os.getenv("WATSON_STT_API_KEY")
@@ -433,7 +437,7 @@ def reaction_replace(options, reactions):
     return options, reactions
 
 #=====投票選択肢embed作成=====
-def make_embed_text(options, reactions, question, description):
+def make_poll_embed(options, reactions, question, description):
     for i, opt in enumerate(options):
         if opt:
             description += f"{reactions[i]} {opt}\n"
@@ -853,6 +857,31 @@ async def handle_make_list(message):
 #---------------
 # STT関係
 #---------------
+#=====要約用テキスト作成=====
+def make_gemini_text(channel_id):
+    lines = [f"{item['time'].strftime('%Y/%m/%d %H:%M:%S')} {item['name']}: {item['text']}" for item in rec_sessions[channel_id]]
+    text = "\n".join(lines)
+    return text
+    
+#=====要約作成=====
+def make_summery(text):
+    prompt = f"""
+以下は、Discordのボイスチャット会議のログです。
+次の通り、摘録を作成してください。
+- 表題は「VC会議摘録」としてください。
+- 冒頭に会議の開催日時と出席者を記録してください。
+- 次に、会議の議題を箇条書きで記録してください。
+- その後に、議題ごとに会議の要点をまとめて箇条書きで記録してください。
+
+--- 会議ログ ---
+{text}
+"""
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt
+    )
+    return response
+
 #=====vcログ作成=====
 def write_vc_log(channel_id, start_time):
     print("[start: write_vc_log]")
@@ -870,7 +899,7 @@ def write_vc_log(channel_id, start_time):
         }
         header = ["time", "name", "text"]
         rows = [
-            [item["time"].strftime('%Y/%m/%d %H:%M:%S'), item["name"], item["text"]]
+            [item["time"].strftime("%Y/%m/%d %H:%M:%S"), item["name"], item["text"]]
             for item in sessions
         ]
         make_csv(filename, rows, meta, header)
@@ -945,9 +974,11 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
             print(f"error anlyzing voice from {user.display_name}: {e}")
     
     filename = write_vc_log(channel.id, start_time)
+    text = make_gemini_text(channel.id)
+    summerized_text = make_summery(text)
     
     # discordに送信
-    await status_msg.edit(content="VCのログのCSVだよ🫡", file=discord.File(filename))
+    await status_msg.edit(content="VCのログを作成したよ🫡", file=discord.File(filename))
     
     # 録音セッション辞書からチャンネルIDを削除
     remove_rec_session(channel.id, channel.name)
@@ -1181,7 +1212,7 @@ class AddOptionInput(discord.ui.Modal):
         # embedを書き換え
         question = votes[self.msg_id]["question"]
         description = ""
-        embed = make_embed_text(options, reactions, question, description)
+        embed = make_poll_embed(options, reactions, question, description)
 
         # embedを表示
         message = await interaction.channel.fetch_message(self.msg_id)
@@ -1363,7 +1394,7 @@ async def vote(ctx: discord.ApplicationContext,
     description = ""
 
     # Embedで出力
-    embed = make_embed_text(options, reactions, question, description)
+    embed = make_poll_embed(options, reactions, question, description)
     await ctx.interaction.response.send_message(embed=embed)
     
     # リアクションを追加
