@@ -875,6 +875,7 @@ def make_summery(text):
   * 議題: 議事の議題を記載
   * 議事概要: 議事内容を要約して箇条書きで記載
   * 決定事項: 決定した事項があれば記載
+* 見出しのレベルは###としてください
 
 --- 会議ログ ---
 {text}
@@ -988,7 +989,7 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
         color=discord.Color.purple()
     )
     # discordに送信
-    await status_msg.edit(embed=embed)
+    await status_msg.edit(content="", embed=embed)
     await channel.send(content="VCのログを作成したよ🫡", file=discord.File(filename))
     
     # 録音セッション辞書からチャンネルIDを削除
