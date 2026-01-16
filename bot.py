@@ -929,6 +929,10 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
                     rel_start = result.get("timestamp", 0)
                     actual_start = user_start_time + timedelta(seconds=rel_start)
                     transcript = result["alternatives"][0]["transcript"]
+                    
+                    print(f"DEBUG: rel_start={rel_start} (type: {type(rel_start)})", flush=True)
+                    print(f"DEBUG: actual_start={actual_start}", flush=True)
+                    
                     rec_sessions[channel.id].append({
                         "time": actual_start,
                         "name": user_name,
