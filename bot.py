@@ -186,14 +186,17 @@ def clean_slash_options(func):
 #---------------
 #=====辞書をjsonファイルに保存=====
 def export_data(data: dict, name: str):
-    # 指定ディレクトリがなければ作成する
-    os.makedirs(f"/mnt/data", exist_ok=True)
-    #jsonファイルを開く（存在しなければ作成する）
-    with open(f"/mnt/data/{name}.json", "w", encoding = "utf-8") as file:
-        # jsonファイルを保存
-        json.dump(data, file, ensure_ascii=False, indent=2)
-    print(f"saved dict: {datetime.now(JST)} - {name}")
-    print(f"saved dict: {name}: {data}")
+    try:
+        # 指定ディレクトリがなければ作成する
+        os.makedirs(f"/mnt/data", exist_ok=True)
+        #jsonファイルを開く（存在しなければ作成する）
+        with open(f"/mnt/data/{name}.json", "w", encoding = "utf-8") as file:
+            # jsonファイルを保存
+            json.dump(data, file, ensure_ascii=False, indent=2)
+        print(f"saved dict: {datetime.now(JST)} - {name}")
+        print(f"saved dict: {name}: {data}")
+    except Exception as e:
+        print(f"saving dict error: {e}")
 
 #=====jsonファイル保存前処理=====
 #---統合辞書---
