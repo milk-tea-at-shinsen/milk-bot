@@ -153,7 +153,7 @@ rec_sessions = {}
 def preset_dict(guild_id):
     # 統合辞書にサーバーidが登録されていなければ、空の辞書を作成
     if guild_id not in all_data:
-        print("[all_data presetting: guild: {guild_id}]"
+        print("[all_data presetting: guild: {guild_id}]")
         all_data[guild_id] = {
             "reminders": {},
             "votes": {},
