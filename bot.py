@@ -1346,9 +1346,6 @@ async def on_ready():
 @bot.event
 async def on_message(message): 
     print("[start: on_message]")
-    make_list_channels = await all_data[message.guild.id]["make_list_channels"]
-    rec_sessions = await all_data[message.guild.id]["rec_sessions"]
-    
     # Botのメッセージは無視
     if message.author.bot:
         return
@@ -1356,6 +1353,10 @@ async def on_message(message):
     if message.content.startswith("!"):
         await bot.process_commands(message)
         return
+
+    make_list_channels = all_data[message.guild.id]["make_list_channels"]
+    rec_sessions = all_data[message.guild.id]["rec_sessions"]
+    
     # メッセージがリスト化対象チャンネルに投稿された場合、リスト化処理を行う
     if message.channel.id in make_list_channels:
         await handle_make_list(message)
