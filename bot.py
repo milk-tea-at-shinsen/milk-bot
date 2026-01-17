@@ -80,8 +80,8 @@ def load_data(data):
             #jsonが存在しない場合は、戻り値を空の辞書にする
             print(f"dict {data}: not exist")
             return {}
-    except:
-        print(f"dict {data}: load error")
+    except Exception as e:
+        print(f"dict {data}: load error: {e}")
         return {}
     
 #=====各辞書読込前処理=====
@@ -207,7 +207,7 @@ def save_all_data():
         # reminders辞書のdatetime型をisoformatに直してから保存
         data_to_save[guild_id]["reminders"] = {dt.isoformat(): value for dt, value in guild_dict["reminders"].items()}
 
-    print(f"data_to_save: {data_to_save}"
+    print(f"data_to_save: {data_to_save}")
     export_data(data_to_save, "all_data")
 
 # #---リマインダー---
