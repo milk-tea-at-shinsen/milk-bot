@@ -66,6 +66,18 @@ stt.set_service_url(WATSON_STT_URL)
 #=====タイムゾーンの指定=====
 JST = timezone(timedelta(hours=9), "JST")
 
+#=====辞書プリセット処理=====
+def preset_dict(guild_id):
+    # 統合辞書にサーバーidが登録されていなければ、空の辞書を作成
+    if guild_id not in all_data:
+        all_data[guild_id] = {
+            "reminders": {},
+            "votes": {},
+            "proxy_votes": {},
+            "make_list_channels": [],
+            "rec_sessions": {}
+        }
+
 #=====辞書読込共通処理=====
 def load_data(data):
     try:
@@ -93,7 +105,7 @@ try:
             # 投票辞書キーのmsg_idをint型に戻す
             all_data[guild_id]["votes"] = {int(key): value for key, value in raw_data[guild_id]["votes"].items()}
             # 代理投票辞書キーのmsg_idをint型に戻す
-            all_data[guild_id]["proxy_votes"] = {int(key): value for key, value in raw_data.items()}
+            all_data[guild_id]["proxy_votes"] = {int(key): value for key, value in raw_data[guild_id]["proxy_votes"].items()}
     else:
         all_data = {}
 except:
@@ -1346,6 +1358,11 @@ async def on_ready():
 @bot.event
 async def on_message(message): 
     print("[start: on_message]")
+    await bot.process_commands(message)
+    return
+
+    make_list_channels = all_data[message.guild.id]["make_list_channels"]
+    rec_sessions = all_data[message.guild.id]["rec_sessions"]
     # Botのメッセージは無視
     if message.author.bot:
         return
@@ -1353,10 +1370,6 @@ async def on_message(message):
     if message.content.startswith("!"):
         await bot.process_commands(message)
         return
-
-    make_list_channels = all_data[message.guild.id]["make_list_channels"]
-    rec_sessions = all_data[message.guild.id]["rec_sessions"]
-    
     # メッセージがリスト化対象チャンネルに投稿された場合、リスト化処理を行う
     if message.channel.id in make_list_channels:
         await handle_make_list(message)
@@ -1385,22 +1398,36 @@ async def move_dict(ctx):
     all_data[ctx.guild.id] = {}
     if reminders:
         all_data[guild_id]["reminders"] = reminders
-        print(f'reminders: {reminders}')
-        print(f'all_data[guild_id]["reminders"]: {all_data[guild_id]["reminders"]}')
+    else:
+        all_data[guild_id]["reminders"] = {}
+    print(f'reminders: {reminders}')
+    print(f'all_data[guild_id]["reminders"]: {all_data[guild_id]["reminders"]}')
+    
     if votes:
-        all_data[guild_id]["votes"] = votes
-        print(f'votes: {votes}')
-        print(f'all_data[guild_id]["votes"]: {all_data[guild_id]["votes"]}')
+        all_data[guild_id]["reminders"] = votes
+    else:
+        all_data[guild_id]["reminders"] = {}
+    print(f'votes: {votes}')
+    print(f'all_data[guild_id]["votes"]: {all_data[guild_id]["votes"]}')
+
     if proxy_votes:
         all_data[guild_id]["proxy_votes"] = proxy_votes
-        print(f'proxy_votes: {proxy_votes}')
-        print(f'all_data[guild_id]["proxy_votes"]: {all_data[guild_id]["proxy_votes"]}')
+    else:
+        all_data[guild_id]["proxy_votes"] = {}
+    print(f'proxy_votes: {proxy_votes}')
+    print(f'all_data[guild_id]["proxy_votes"]: {all_data[guild_id]["proxy_votes"]}')
+
     if make_list_channels:
         all_data[guild_id]["make_list_channels"] = list(make_list_channels.values())
-        print(f'make_list_channels: {make_list_channels}')
-        print(f'all_data[guild_id]["make_list_channels"]: {all_data[guild_id]["make_list_channels"]}')
+    else:
+        all_data[guild_id]["make_list_channels"] = []
+    print(f'make_list_channels: {make_list_channels}')
+    print(f'all_data[guild_id]["make_list_channels"]: {all_data[guild_id]["make_list_channels"]}')
+
     if rec_sessions:
         all_data[guild_id]["rec_sessions"] = rec_sessions
+    else:
+        all_data[guild_id]["rec_sessions"] = {}
     
     print(f"all_data: {all_data}")
     save_all_data()
