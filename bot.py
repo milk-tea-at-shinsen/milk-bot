@@ -425,7 +425,7 @@ async def reminder_loop():
         wait = (next_minute - now).total_seconds()
         await asyncio.sleep(wait)
 
-        for guild_id in all_data():
+        for guild_id in all_data:
             reminders = all_data[guild_id]["reminders"]
             # 辞書に該当時刻が登録されていた場合
             if next_minute in reminders:
