@@ -67,19 +67,6 @@ stt.set_service_url(WATSON_STT_URL)
 #=====タイムゾーンの指定=====
 JST = timezone(timedelta(hours=9), "JST")
 
-#=====辞書プリセット処理=====
-def preset_dict(guild_id):
-    # 統合辞書にサーバーidが登録されていなければ、空の辞書を作成
-    if guild_id not in all_data:
-        all_data[guild_id] = {
-            "reminders": {},
-            "votes": {},
-            "proxy_votes": {},
-            "make_list_channels": [],
-            "rec_sessions": {}
-        }
-        save_all_data()
-
 #=====辞書読込共通処理=====
 def load_data(data):
     try:
@@ -112,6 +99,8 @@ try:
         all_data = {}
 except:
     all_data = {}
+
+print(f"all_data: {all_data}")
 
 #---リマインダー辞書---
 raw_data = load_data("reminders")
@@ -159,6 +148,20 @@ print(f"dict make_list_channels: {make_list_channels}")
 
 #---録音セッション---
 rec_sessions = {}
+
+#=====辞書プリセット処理=====
+def preset_dict(guild_id):
+    # 統合辞書にサーバーidが登録されていなければ、空の辞書を作成
+    if guild_id not in all_data:
+        print("[all_data presetting: guild: {guild_id}]"
+        all_data[guild_id] = {
+            "reminders": {},
+            "votes": {},
+            "proxy_votes": {},
+            "make_list_channels": [],
+            "rec_sessions": {}
+        }
+        save_all_data()
 
 #===============
 # 共通処理関数
@@ -1373,6 +1376,8 @@ async def on_message(message):
     print("[start: on_message]")
     make_list_channels = all_data[message.guild.id]["make_list_channels"]
     rec_sessions = all_data[message.guild.id]["rec_sessions"]
+    if message.guild is None:
+        return
     # Botのメッセージは無視
     if message.author.bot:
         return
