@@ -198,6 +198,7 @@ def export_data(data: dict, name: str):
 #=====jsonファイル保存前処理=====
 #---統合辞書---
 def save_all_data():
+    print("[start: save_all_data]")
     data_to_save = {}
 
     for guild_id, guild_dict in all_data.items():
@@ -206,6 +207,7 @@ def save_all_data():
         # reminders辞書のdatetime型をisoformatに直してから保存
         data_to_save[guild_id]["reminders"] = {dt.isoformat(): value for dt, value in guild_dict["reminders"].items()}
 
+    print(f"data_to_save: {data_to_save}"
     export_data(data_to_save, "all_data")
 
 # #---リマインダー---
