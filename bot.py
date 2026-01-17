@@ -29,6 +29,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 intents.voice_states = True
+intents.guilds = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 print(f"Pycord version: {discord.__version__}")
 
@@ -1349,18 +1350,26 @@ class VoteSelectMode(Enum):
 @bot.event
 async def on_ready():
     print(f"Botを起動: {bot.user}")
+
+    # 統合辞書に登録されていないサーバーの場合は辞書を初期化
+    for guild in bot.guilds:
+        preset_dict(guild.id)
     
     # リマインダーループの開始
     print(f"ループ開始: {datetime.now(JST)}")
     bot.loop.create_task(reminder_loop())
 
+# 新規サーバー導入時処理
+@bot.event
+async def on_guild_join():
+    # 統合辞書に登録されていないサーバーの場合は辞書を初期化
+    for guild in bot.guilds:
+        preset_dict(guild.id)
+
 #  メッセージ受信時処理
 @bot.event
 async def on_message(message): 
     print("[start: on_message]")
-    await bot.process_commands(message)
-    return
-
     make_list_channels = all_data[message.guild.id]["make_list_channels"]
     rec_sessions = all_data[message.guild.id]["rec_sessions"]
     # Botのメッセージは無視
