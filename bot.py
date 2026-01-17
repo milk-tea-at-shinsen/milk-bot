@@ -466,7 +466,7 @@ async def make_vote_result(interaction, msg_id):
         # リアクション投票分
         # リアクションしたユーザーがbotでなければリストに追加
         reaction_users = [reaction_user async for reaction_user in reaction.users() if reaction_user != bot.user]
-        users = [user.display_name for user in reaction_users]
+        users = [user.nick or user.display_name or user.name for user in reaction_users]
         
         # 代理投票分
         if msg_id in proxy_votes:
@@ -485,7 +485,7 @@ async def make_vote_result(interaction, msg_id):
                             except:
                                 agent = None
                         if agent:
-                            agent_display_name = agent.nick or agent.display_name
+                            agent_display_name = agent.nick or agent.display_name or agent.name
                         else:
                             agent_display_name = "Unknown"
 
@@ -936,7 +936,7 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
 
     for user_id, audio in sink.audio_data.items():
         user = channel.guild.get_member(user_id) or await channel.guild.fetch_member(user_id)
-        user_name = user.nick or user.display_name
+        user_name = user.nick or user.display_name or user.name
 
         # userがbotなら無視
         if user.bot:
@@ -992,7 +992,7 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
                         "text": transcript.strip()
                     })
         except Exception as e:
-            print(f"error anlyzing voice from {user.display_name}: {e}")
+            print(f"error anlyzing voice from {user.nick or user.display_name or user.name}: {e}")
     
     filename = write_vc_log(channel.id, start_time)
     text = make_gemini_text(channel.id)
@@ -1196,7 +1196,7 @@ class VoteOptionSelect(View):
         
         add_proxy_vote(self.msg_id, self.voter, self.agent_id, opt_idx)
         agent = guild.get_member(self.agent_id)
-        agent_display_name = agent.nick or agent.global_name
+        agent_display_name = agent.nick or agent.display_name or agent.name
         await interaction.message.edit(content=f"**{agent_display_name}** から **{self.voter}** の分の投票を受け付けたよ🫡")
 
 #=====追加選択肢入力=====
@@ -1297,7 +1297,7 @@ async def on_message(message):
     if vc and vc.recording and message.channel.id in rec_sessions:
         rec_sessions[message.channel.id].append({
             "time": ts,
-            "name": message.author.nick or message.author.display_name,
+            "name": message.author.nick or message.author.display_name or message.author.name,
             "text": message.content.strip()
         })
     # その他のコマンドは実行
@@ -1531,7 +1531,7 @@ async def export_members(ctx: discord.ApplicationContext):
         "# collected_at": datetime.now(JST).strftime("%Y/%m/%d %H:%M")
     }
     header = ["user_id", "user_name", "display_name", "is_bot"]
-    rows = [[member.id, member.name, member.nick or member.global_name, member.bot] async for member in guild.fetch_members(limit=None)]
+    rows = [[member.id, member.name, member.nick or member.display_name or member.name, member.bot] async for member in guild.fetch_members(limit=None)]
     
     make_csv(filename, rows, meta, header)
     
