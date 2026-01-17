@@ -191,8 +191,9 @@ def export_data(data: dict, name: str):
     #jsonファイルを開く（存在しなければ作成する）
     with open(f"/mnt/data/{name}.json", "w", encoding = "utf-8") as file:
         # jsonファイルを保存
-        json.dump(data, file, ensure_ascii=False, indent=2) 
-    print(f"辞書ファイルを保存完了: {datetime.now(JST)} - {name}")
+        json.dump(data, file, ensure_ascii=False, indent=2)
+    print(f"saved dict: {datetime.now(JST)} - {name}")
+    print(f"saved dict: {name}: {data}")
 
 #=====jsonファイル保存前処理=====
 #---統合辞書---
