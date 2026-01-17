@@ -74,12 +74,14 @@ def load_data(data):
         if os.path.exists(f"/mnt/data/{data}.json"):
             # fileオブジェクト変数に格納
             with open(f"/mnt/data/{data}.json", "r", encoding = "utf-8") as file:
-                print(f"辞書ファイルを読込完了: {datetime.now(JST)} - {data}")
+                print(f"loaded dict: {datetime.now(JST)} - {data}")
                 return json.load(file)
         else:
             #jsonが存在しない場合は、戻り値を空の辞書にする
+            print(f"dict {data}: not exist")
             return {}
     except:
+        print(f"dict {data}: load error")
         return {}
     
 #=====各辞書読込前処理=====
@@ -100,7 +102,7 @@ try:
 except:
     all_data = {}
 
-print(f"all_data: {all_data}")
+print(f"dict all_data: {all_data}")
 
 #---リマインダー辞書---
 raw_data = load_data("reminders")
@@ -1353,19 +1355,20 @@ class VoteSelectMode(Enum):
 # Bot起動時処理
 @bot.event
 async def on_ready():
-    print(f"Botを起動: {bot.user}")
+    print(f"Bot started: {bot.user}")
 
     # 統合辞書に登録されていないサーバーの場合は辞書を初期化
     for guild in bot.guilds:
         preset_dict(guild.id)
     
     # リマインダーループの開始
-    print(f"ループ開始: {datetime.now(JST)}")
+    print(f"[start loop: {datetime.now(JST)}]")
     bot.loop.create_task(reminder_loop())
 
 # 新規サーバー導入時処理
 @bot.event
 async def on_guild_join():
+    print("[start: on_guild_join]")
     # 統合辞書に登録されていないサーバーの場合は辞書を初期化
     for guild in bot.guilds:
         preset_dict(guild.id)
