@@ -1414,9 +1414,9 @@ async def move_dict(ctx):
     print(f'all_data[guild_id]["reminders"]: {all_data[guild_id]["reminders"]}')
     
     if votes:
-        all_data[guild_id]["reminders"] = votes
+        all_data[guild_id]["votes"] = votes
     else:
-        all_data[guild_id]["reminders"] = {}
+        all_data[guild_id]["votes"] = {}
     print(f'votes: {votes}')
     print(f'all_data[guild_id]["votes"]: {all_data[guild_id]["votes"]}')
 
