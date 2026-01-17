@@ -78,6 +78,7 @@ def preset_dict(guild_id):
             "make_list_channels": [],
             "rec_sessions": {}
         }
+        save_all_data()
 
 #=====辞書読込共通処理=====
 def load_data(data):
