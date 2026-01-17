@@ -1580,7 +1580,7 @@ async def vote(ctx: discord.ApplicationContext,
 async def vote_add_option(ctx: discord.ApplicationContext):
     votes = all_data[ctx.guild.id]["votes"]
     if votes:
-        view = VoteSelect(mode=VoteSelectMode.ADD_OPTION, voter=None, agent_id=None)
+        view = VoteSelect(guild_id=ctx.guild.id, mode=VoteSelectMode.ADD_OPTION, voter=None, agent_id=None)
         await ctx.interaction.response.send_message("選択肢を追加する投票を選んでね", view=view)
     # 投票がない場合のメッセージ
     else:
@@ -1600,10 +1600,10 @@ async def vote_result(
     votes = all_data[ctx.guild.id]["votes"]
     if votes:
         if mode == "mid":
-            view = VoteSelect(mode=VoteSelectMode.MID_RESULT, voter=None, agent_id=None)
+            view = VoteSelect(guild_id=ctx.guild.id, mode=VoteSelectMode.MID_RESULT, voter=None, agent_id=None)
             await ctx.interaction.response.send_message("どの投票結果を表示するか選んでね", view=view)
         elif mode == "final":
-            view = VoteSelect(mode=VoteSelectMode.FINAL_RESULT, voter=None, agent_id=None)
+            view = VoteSelect(guild_id=ctx.guild.id, mode=VoteSelectMode.FINAL_RESULT, voter=None, agent_id=None)
             await ctx.interaction.response.send_message("どの投票結果を表示するか選んでね", view=view)
         else:
             await ctx.interaction.response.send_message("⚠️選択モードの指定がまちがってるよ", ephemeral=True)
@@ -1618,7 +1618,7 @@ async def proxy_vote(ctx: discord.ApplicationContext, voter: str = discord.Optio
     votes = all_data[ctx.guild.id]["votes"]
     if votes:
         agent_id = ctx.interaction.user.id
-        view = VoteSelect(mode=VoteSelectMode.PROXY_VOTE, voter=voter, agent_id=agent_id)
+        view = VoteSelect(guild_id=ctx.guild.id, mode=VoteSelectMode.PROXY_VOTE, voter=voter, agent_id=agent_id)
         await ctx.interaction.response.send_message("どの投票に代理投票するか選んでね", view=view)
     else:
         await ctx.interaction.response.send_message("⚠️代理投票できる投票がないよ", ephemeral=True)
@@ -1629,7 +1629,7 @@ async def cancel_proxy(ctx: discord.ApplicationContext, voter: str = discord.Opt
     votes = all_data[ctx.guild.id]["votes"]
     if votes:
         agent_id = ctx.interaction.user.id
-        view = VoteSelect(mode=VoteSelectMode.CANCEL_PROXY_VOTE, voter=voter, agent_id=agent_id)
+        view = VoteSelect(guild_id=ctx.guild.id, mode=VoteSelectMode.CANCEL_PROXY_VOTE, voter=voter, agent_id=agent_id)
         await ctx.interaction.response.send_message("代理投票を取り消しする投票を選んでね", view=view)
     else:
         await ctx.interaction.response.send_message("⚠️取り消しできる投票がないよ", ephemeral=True)
@@ -1639,7 +1639,7 @@ async def cancel_proxy(ctx: discord.ApplicationContext, voter: str = discord.Opt
 async def delete_vote(ctx):
     votes = all_data[ctx.guild.id]["votes"]
     if votes:
-        view = VoteSelect(mode=VoteSelectMode.DELETE_VOTE, voter=None, agent_id=None)
+        view = VoteSelect(guild_id=ctx.guild.id, mode=VoteSelectMode.DELETE_VOTE, voter=None, agent_id=None)
         await ctx.message.delete()
         await ctx.send("どの投票を削除するか選んでね", view=view)
     else:
