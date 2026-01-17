@@ -1388,10 +1388,16 @@ async def move_dict(ctx):
         print(f'all_data[guild_id]["reminders"]: {all_data[guild_id]["reminders"]}')
     if votes:
         all_data[guild_id]["votes"] = votes
+        print(f'votes: {votes}')
+        print(f'all_data[guild_id]["votes"]: {all_data[guild_id]["votes"]}')
     if proxy_votes:
         all_data[guild_id]["proxy_votes"] = proxy_votes
+        print(f'proxy_votes: {proxy_votes}')
+        print(f'all_data[guild_id]["proxy_votes"]: {all_data[guild_id]["proxy_votes"]}')
     if make_list_channels:
         all_data[guild_id]["make_list_channels"] = list(make_list_channels.values())
+        print(f'make_list_channels: {make_list_channels}')
+        print(f'all_data[guild_id]["make_list_channels"]: {all_data[guild_id]["make_list_channels"]}')
     if rec_sessions:
         all_data[guild_id]["rec_sessions"] = rec_sessions
     
