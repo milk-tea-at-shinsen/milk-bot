@@ -29,6 +29,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 intents.voice_states = True
+intents.guilds = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 print(f"Pycord version: {discord.__version__}")
 
@@ -69,24 +70,49 @@ JST = timezone(timedelta(hours=9), "JST")
 #=====辞書読込共通処理=====
 def load_data(data):
     try:
-        # reminders.jsonが存在すれば
+        # jsonが存在すれば
         if os.path.exists(f"/mnt/data/{data}.json"):
             # fileオブジェクト変数に格納
             with open(f"/mnt/data/{data}.json", "r", encoding = "utf-8") as file:
-                print(f"辞書ファイルを読込完了: {datetime.now(JST)} - {data}")
+                print(f"loaded dict: {datetime.now(JST)} - {data}")
                 return json.load(file)
         else:
             #jsonが存在しない場合は、戻り値を空の辞書にする
+            print(f"dict {data}: not exist")
             return {}
-    except:
+    except Exception as e:
+        print(f"dict {data}: load error: {e}")
         return {}
     
 #=====各辞書読込前処理=====
-#---リマインダー辞書---
-data_raw = load_data("reminders")
+#---統合辞書---
+raw_data = load_data("all_data")
 try:
-    if data_raw:
-        reminders = {datetime.fromisoformat(key): value for key, value in data_raw.items()}
+    if raw_data:
+        print("exist raw_data")
+        all_data = {int(key): value for key, value in raw_data.items()}
+        print(f"all_data: {all_data}")
+        for guild_id, guild_dict in all_data.items():
+            # リマインダー辞書キーのdtをdatetime型に戻す
+            all_data[guild_id]["reminders"] = {datetime.fromisoformat(key): value for key, value in guild_dict["reminders"].items()}
+            # 投票辞書キーのmsg_idをint型に戻す
+            all_data[guild_id]["votes"] = {int(key): value for key, value in guild_dict["votes"].items()}
+            # 代理投票辞書キーのmsg_idをint型に戻す
+            all_data[guild_id]["proxy_votes"] = {int(key): value for key, value in guild_dict["proxy_votes"].items()}
+    else:
+        print("not exist raw_data")
+        all_data = {}
+except Exception as e:
+    print(f"raw_data convert error: {e}")
+    all_data = {}
+
+print(f"dict all_data: {all_data}")
+
+#---リマインダー辞書---
+raw_data = load_data("reminders")
+try:
+    if raw_data:
+        reminders = {datetime.fromisoformat(key): value for key, value in raw_data.items()}
     else:
         reminders = {}
 except:
@@ -95,22 +121,18 @@ except:
 print(f"dict reminders: {reminders}")
 
 #---投票辞書---
-data_raw = load_data("votes")
-if data_raw:
-    votes = {int(key): value for key, value in data_raw.items()}
+raw_data = load_data("votes")
+if raw_data:
+    votes = {int(key): value for key, value in raw_data.items()}
 else:
     votes = {}
 print(f"dict votes: {votes}")
 
 #---代理投票辞書---
-data_raw = load_data("proxy_votes")
+raw_data = load_data("proxy_votes")
 try:
-    if data_raw:
-        msg_id, values = next(iter(data_raw.items()))
-        if "option" in values:
-            proxy_votes = {}
-        else:
-            proxy_votes = {int(key): value for key, value in data_raw.items()}
+    if raw_data:
+        proxy_votes = {int(key): value for key, value in raw_data.items()}
     else:
         proxy_votes = {}
 except:
@@ -119,10 +141,10 @@ except:
 print(f"dict proxy_votes: {proxy_votes}")
 
 #---リスト化対象チャンネル辞書---
-data_raw = load_data("make_list_channels")
+raw_data = load_data("make_list_channels")
 try:
-    if data_raw:
-        make_list_channels = {key: value for key, value in data_raw.items()}
+    if raw_data:
+        make_list_channels = {key: value for key, value in raw_data.items()}
     else:
         make_list_channels = {"channels": []}
 except:
@@ -132,6 +154,20 @@ print(f"dict make_list_channels: {make_list_channels}")
 
 #---録音セッション---
 rec_sessions = {}
+
+#=====辞書プリセット処理=====
+def preset_dict(guild_id):
+    # 統合辞書にサーバーidが登録されていなければ、空の辞書を作成
+    if guild_id not in all_data:
+        print("[all_data presetting: guild: {guild_id}]")
+        all_data[guild_id] = {
+            "reminders": {},
+            "votes": {},
+            "proxy_votes": {},
+            "make_list_channels": [],
+            "rec_sessions": {}
+        }
+        save_all_data()
 
 #===============
 # 共通処理関数
@@ -154,35 +190,53 @@ def clean_slash_options(func):
 #---------------
 #=====辞書をjsonファイルに保存=====
 def export_data(data: dict, name: str):
-    # 指定ディレクトリがなければ作成する
-    os.makedirs(f"/mnt/data", exist_ok=True)
-    #jsonファイルを開く（存在しなければ作成する）
-    with open(f"/mnt/data/{name}.json", "w", encoding = "utf-8") as file:
-        # jsonファイルを保存
-        json.dump(data, file, ensure_ascii=False, indent=2) 
-    print(f"辞書ファイルを保存完了: {datetime.now(JST)} - {name}")
+    try:
+        # 指定ディレクトリがなければ作成する
+        os.makedirs(f"/mnt/data", exist_ok=True)
+        #jsonファイルを開く（存在しなければ作成する）
+        with open(f"/mnt/data/{name}.json", "w", encoding = "utf-8") as file:
+            # jsonファイルを保存
+            json.dump(data, file, ensure_ascii=False, indent=2)
+        print(f"saved dict: {datetime.now(JST)} - {name}")
+    except Exception as e:
+        print(f"saving dict error: {e}")
 
 #=====jsonファイル保存前処理=====
-#---リマインダー---
-def save_reminders():
-    reminders_to_save = {dt.isoformat(): value for dt, value in reminders.items()}
-    export_data(reminders_to_save, "reminders")
+#---統合辞書---
+def save_all_data():
+    print("[start: save_all_data]")
+    data_to_save = {}
 
-#---投票---
-def save_votes():
-    export_data(votes, "votes")
+    for guild_id, guild_dict in all_data.items():
+        data_to_save[guild_id] = guild_dict.copy()
 
-#---代理投票---
-def save_proxy_votes():
-    export_data(proxy_votes, "proxy_votes")
+        # reminders辞書のdatetime型をisoformatに直してから保存
+        data_to_save[guild_id]["reminders"] = {dt.isoformat(): value for dt, value in guild_dict["reminders"].items()}
 
-#---リスト化対象チャンネル---
-def save_make_list_channels():
-    export_data(make_list_channels, "make_list_channels")
+    print(f"data_to_save: {data_to_save}")
+    export_data(data_to_save, "all_data")
+
+# #---リマインダー---
+# def save_reminders():
+#     reminders_to_save = {dt.isoformat(): value for dt, value in reminders.items()}
+#     export_data(reminders_to_save, "reminders")
+
+# #---投票---
+# def save_votes():
+#     export_data(votes, "votes")
+
+# #---代理投票---
+# def save_proxy_votes():
+#     export_data(proxy_votes, "proxy_votes")
+
+# #---リスト化対象チャンネル---
+# def save_make_list_channels():
+#     export_data(make_list_channels, "make_list_channels")
 
 #=====辞書への登録処理=====
 #---リマインダー辞書---
-def add_reminder(dt, repeat, interval, channel_id, msg):
+def add_reminder(guild_id, dt, repeat, interval, channel_id, msg):
+    reminders = all_data[guild_id]["reminders"]
     # 日時が辞書になければ辞書に行を追加
     if dt not in reminders:
         reminders[dt] = []
@@ -194,10 +248,12 @@ def add_reminder(dt, repeat, interval, channel_id, msg):
          "msg": msg}
     )
     # json保存前処理
-    save_reminders()
+    #save_reminders()
+    save_all_data()
 
 #---投票辞書---
-def add_vote(msg_id, question, reactions, options):
+def add_vote(guild_id, msg_id, question, reactions, options):
+    votes = all_data[guild_id]["votes"]
     # 辞書に項目を登録
     votes[msg_id] = {
         "question": question,
@@ -206,11 +262,13 @@ def add_vote(msg_id, question, reactions, options):
     }
 
     # json保存前処理
-    save_votes()
+    # save_votes()
+    save_all_data()
 
 #---代理投票辞書---
-def add_proxy_vote(msg_id, voter, agent_id, opt_idx):
+def add_proxy_vote(guild_id, msg_id, voter, agent_id, opt_idx):
     print("[start: add_proxy_vote]")
+    proxy_votes = all_data[guild_id]["proxy_votes"]
     # msg_idが辞書になければ辞書に行を追加
     if msg_id not in proxy_votes:
         proxy_votes[msg_id] = {}
@@ -222,34 +280,40 @@ def add_proxy_vote(msg_id, voter, agent_id, opt_idx):
     }
 
     # json保存前処理
-    save_proxy_votes()
+    # save_proxy_votes()
+    save_all_data()
 
 #---リスト化対象チャンネル辞書---
-def add_make_list_channel(channel_id):
-    # 辞書に項目を登録
-    if channel_id not in make_list_channels["channels"]:
-        make_list_channels["channels"].append(channel_id)
+def add_make_list_channel(guild_id, channel_id):
+    make_list_channels = all_data[guild_id]["make_list_channels"]
+    # リストに項目を登録
+    if channel_id not in make_list_channels:
+        make_list_channels.append(channel_id)
         print(f"make_list_channels: {make_list_channels}")
 
     # json保存前処理
-    save_make_list_channels()
+    #save_make_list_channels()
+    save_all_data()
 
 #---録音セッション辞書---
-def add_rec_session(channel_id):
+def add_rec_session(guild_id, channel_id):
     print("[start: add_rec_session]")
+    rec_sessions = all_data[guild_id]["rec_sessions"]
     # channel_idが辞書になければ辞書に行を追加
     if channel_id not in rec_sessions:
         rec_sessions[channel_id] = []
 
 #=====辞書からの削除処理=====
 #---リマインダー辞書---
-def remove_reminder(dt, idx=None):
+def remove_reminder(guild_id, dt, idx=None):
+    reminders = all_data[guild_id]["reminders"]
     # idxがNoneの場合は日時全体を削除、そうでなければ指定インデックスの行を削除
     if idx is None:
         if dt in reminders:
             removed = reminders[dt]
             del reminders[dt]
-            save_reminders()
+            #save_reminders()
+            save_all_data()
             print(f"リマインダーを削除: {dt.strftime('%Y/%m/%d %H:%M')}")
             return removed
         else:
@@ -261,7 +325,8 @@ def remove_reminder(dt, idx=None):
             # 値が空の日時全体を削除
             if not reminders[dt]:
                 del reminders[dt]
-            save_reminders()
+            #save_reminders()
+            save_all_data()
             print(f"リマインダーを削除: {dt.strftime('%Y/%m/%d %H:%M')} - {removed['msg']}")
             return removed
         else:
@@ -269,12 +334,14 @@ def remove_reminder(dt, idx=None):
             return None
 
 #---投票辞書---
-def remove_vote(msg_id):
+def remove_vote(guild_id, msg_id):
     print("[start: remove_vote]")
+    votes = all_data[guild_id]["votes"]
     if msg_id in votes:
         removed = votes[msg_id]
         del votes[msg_id]
-        save_votes()
+        #save_votes()
+        save_all_data()
         print(f"投票を削除: {removed['question']}")
         return removed
     else:
@@ -282,12 +349,14 @@ def remove_vote(msg_id):
         return None
         
 #---代理投票辞書---
-def remove_proxy_vote(msg_id):
+def remove_proxy_vote(guild_id, msg_id):
     print("[start: remove_proxy_vote]")
+    proxy_votes = all_data[guild_id]["proxy_votes"]
     if msg_id in proxy_votes:
         removed = proxy_votes[msg_id]
         del proxy_votes[msg_id]
-        save_proxy_votes()
+        #save_proxy_votes()
+        save_all_data()
         print(f"代理投票({msg_id})を削除しました")
         return removed
     else:
@@ -295,11 +364,13 @@ def remove_proxy_vote(msg_id):
         return None
 
 #---リスト化対象チャンネル辞書---
-def remove_make_list_channel(channel_id, channel_name):
+def remove_make_list_channel(guild_id, channel_id, channel_name):
     print("[start: remove_make_list_channel]")
-    if channel_id in make_list_channels["channels"]:
-        make_list_channels["channels"].remove(channel_id)
-        save_make_list_channels()
+    make_list_channels = all_data[guild_id]["make_list_channels"]
+    if channel_id in make_list_channels:
+        make_list_channels.remove(channel_id)
+        #save_make_list_channels()
+        save_all_data()
         print(f"リスト化対象から削除: {channel_name}")
         return channel_name
     else:
@@ -307,8 +378,9 @@ def remove_make_list_channel(channel_id, channel_name):
         return None
 
 #---録音セッション辞書---
-def remove_rec_session(channel_id, channel_name):
+def remove_rec_session(guild_id, channel_id, channel_name):
     print("[start: remove_rec_sessions]")
+    rec_sessions = all_data[guild_id]["rec_sessions"]
     if channel_id in rec_sessions:
         del rec_sessions[channel_id]
         print(f"{channel_name}の録音セッションを終了")
@@ -318,14 +390,17 @@ def remove_rec_session(channel_id, channel_name):
         return
 
 #---代理投票辞書からの個別投票除外---
-def cancel_proxy_vote(msg_id, voter, agent_id):
+def cancel_proxy_vote(guild_id, msg_id, voter, agent_id):
     print("[start: cancel_proxy_vote]")
+    proxy_votes = all_data[guild_id]["proxy_votes"]
     if msg_id in proxy_votes:
         # 該当する投票を取り出して投票者と代理人が一致するものを削除
         for key, value in proxy_votes[msg_id].items():
             if (key, value["agent_id"]) == (voter, agent_id):
                 removed = proxy_votes[msg_id][voter]
                 del proxy_votes[msg_id][voter]
+                #save_proxy_votes()
+                save_all_data()
                 print(f"{voter}の代理投票({msg_id})をキャンセルしました")
                 return removed
             else:
@@ -368,7 +443,7 @@ async def handle_remove_reminder(interaction, dt, idx):
             ephemeral=True
         )
 
-#=====通知用ループ処理=====
+#=====通知用ループ処理===== *require modifying
 async def reminder_loop():
     await bot.wait_until_ready()
     while not bot.is_closed():
@@ -378,33 +453,35 @@ async def reminder_loop():
         wait = (next_minute - now).total_seconds()
         await asyncio.sleep(wait)
 
-        # 辞書に該当時刻が登録されていた場合
-        if next_minute in reminders:
-            # 該当行を取り出してラベル付きリストに代入し値を取り出す
-            for rmd_dt in reminders[next_minute]:
-                channel_id = rmd_dt["channel_id"]
-                repeat = rmd_dt["repeat"]
-                interval = rmd_dt["interval"]
-                msg = rmd_dt["msg"]
-                channel = bot.get_channel(channel_id)
-                if channel:
-                    await channel.send(f"{msg}")
-                    print (f"チャンネルにメッセージを送信: {datetime.now(JST)}")
-                else:
-                    print(f"チャンネル取得失敗: {channel_id}")
-            
-                # 繰り返し予定の登録
-                if repeat:
-                    if repeat == "day":
-                        dt = next_minute + timedelta(days=interval)
-                    elif repeat == "hour":
-                        dt = next_minute + timedelta(hours=interval)
-                    elif repeat == "minute":
-                        dt = next_minute + timedelta(minutes=interval)
-                    add_reminder(dt, repeat, interval, channel_id, msg)
-            
-            # 処理済の予定の削除
-            remove_reminder(next_minute)
+        for guild_id in all_data:
+            reminders = all_data[guild_id]["reminders"]
+            # 辞書に該当時刻が登録されていた場合
+            if next_minute in reminders:
+                # 該当行を取り出してラベル付きリストに代入し値を取り出す
+                for rmd_dt in reminders[next_minute]:
+                    channel_id = rmd_dt["channel_id"]
+                    repeat = rmd_dt["repeat"]
+                    interval = rmd_dt["interval"]
+                    msg = rmd_dt["msg"]
+                    channel = bot.get_channel(channel_id)
+                    if channel:
+                        await channel.send(f"{msg}")
+                        print (f"チャンネルにメッセージを送信: {datetime.now(JST)}")
+                    else:
+                        print(f"チャンネル取得失敗: {channel_id}")
+                
+                    # 繰り返し予定の登録
+                    if repeat:
+                        if repeat == "day":
+                            dt = next_minute + timedelta(days=interval)
+                        elif repeat == "hour":
+                            dt = next_minute + timedelta(hours=interval)
+                        elif repeat == "minute":
+                            dt = next_minute + timedelta(minutes=interval)
+                        add_reminder(guild_id, dt, repeat, interval, channel_id, msg)
+                
+                # 処理済の予定の削除
+                remove_reminder(guild_id, next_minute)
 
 #---------------
 # 投票関係
@@ -447,6 +524,8 @@ def make_poll_embed(options, reactions, question, description):
 #=====投票集計=====
 async def make_vote_result(interaction, msg_id):
     print("[start: make_vote_result]")
+    votes = all_data[interaction.guild.id]["votes"]
+    proxy_votes = all_data[interaction.guild.id]["proxy_votes"]
     # 投票辞書を読み込み
     if msg_id in votes:
         options = votes[msg_id]["options"]
@@ -511,6 +590,7 @@ async def make_vote_result(interaction, msg_id):
 #=====投票結果表示=====
 async def show_vote_result(interaction, dt, result, msg_id, mode):
     print("[start: show_vote_result]")
+    votes = all_data[interaction.guild.id]["votes"]
     # Embedの設定
     if msg_id in votes:
         embed = discord.Embed(
@@ -604,6 +684,7 @@ def make_listed_rows(result):
 #=====投票結果CSV出力処理=====
 async def export_vote_csv(interaction, result, msg_id, dt, mode):
     print("[start: export_vote_csv]")
+    votes = all_data[interaction.guild.id]["votes"]
     if msg_id in votes:
         meta = {
             "question": votes[msg_id]["question"],
@@ -858,7 +939,8 @@ async def handle_make_list(message):
 # STT関係
 #---------------
 #=====要約用テキスト作成=====
-def make_gemini_text(channel_id):
+def make_gemini_text(ctx, channel_id):
+    rec_sessions = all_data[ctx.guild.id]["rec_sessions"]
     lines = [f"{item['time'].strftime('%Y/%m/%d %H:%M:%S')} {item['name']}: {item['text']}" for item in rec_sessions[channel_id]]
     text = "\n".join(lines)
     return text
@@ -904,8 +986,9 @@ def make_summery(text):
     return response.text
 
 #=====vcログ作成=====
-def write_vc_log(channel_id, start_time):
+def write_vc_log(ctx, channel_id, start_time):
     print("[start: write_vc_log]")
+    rec_sessions = all_data[ctx.guild.id]["rec_sessions"]
 
     if channel_id in rec_sessions:
         sessions = rec_sessions[channel_id]
@@ -929,8 +1012,9 @@ def write_vc_log(channel_id, start_time):
         return filename
 
 #=====録音後処理=====
-async def after_recording(sink, channel: discord.TextChannel, start_time: datetime, *args):
+async def after_recording(ctx, sink, channel: discord.TextChannel, start_time: datetime, *args):
     print("[start: after_recording]")
+    rec_sessions = all_data[ctx.guild.id]["rec_sessions"]
     status_msg = await channel.send(f"{bot.user.display_name}が考え中…🤔")
     await asyncio.sleep(2)
 
@@ -1010,7 +1094,7 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
     await channel.send(content="VCのログを作成したよ🫡", file=discord.File(filename))
     
     # 録音セッション辞書からチャンネルIDを削除
-    remove_rec_session(channel.id, channel.name)
+    remove_rec_session(ctx.guild.id, channel.id, channel.name)
     
 #===============
 # クラス定義
@@ -1067,8 +1151,11 @@ class ReminderSelect(View):
 #=====投票選択=====
 class VoteSelect(View):
     # クラスの初期設定
-    def __init__(self, mode, voter=None, agent_id=None):
+    def __init__(self, guild_id, mode, voter=None, agent_id=None):
+        votes = all_data[guild_id]["votes"]
         super().__init__()
+        # guild_idプロパティにサーバーidをセット
+        self.guild_id = guild_id
         # modeプロパティに投票モードをセット
         self.mode = mode
         # voterプロパティに投票者名をセット
@@ -1099,6 +1186,7 @@ class VoteSelect(View):
     
     # 投票選択後処理の関数定義
     async def select_callback(self, interaction: discord.Interaction):
+        votes = all_data[self.guild_id]["votes"]
         msg_id = int(interaction.data["values"][0])
 
         # 代理投票
@@ -1108,7 +1196,7 @@ class VoteSelect(View):
             await interaction.message.edit(content="代理投票する選択肢を選んでね", view=view)
         # 代理投票キャンセル
         elif self.mode == VoteSelectMode.CANCEL_PROXY_VOTE:
-            removed = cancel_proxy_vote(msg_id, self.voter, self.agent_id)
+            removed = cancel_proxy_vote(self.guild_id, msg_id, self.voter, self.agent_id)
             await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
             if removed:
                 await interaction.message.edit(content=f"**{self.voter}** の分の代理投票を取り消したよ🫡")
@@ -1126,8 +1214,8 @@ class VoteSelect(View):
         # 削除
         elif self.mode == VoteSelectMode.DELETE_VOTE:
             await interaction.response.defer()
-            remove_vote(msg_id)
-            remove_proxy_vote(msg_id)
+            remove_vote(self.guild_id, msg_id)
+            remove_proxy_vote(self.guild_id, msg_id)
             await interaction.message.delete()
             await interaction.followup.send(content="投票を削除したよ🫡", ephemeral=True)
         # 集計
@@ -1147,13 +1235,14 @@ class VoteSelect(View):
 
             # 投票辞書からの削除
             if self.mode == VoteSelectMode.FINAL_RESULT:
-                remove_vote(msg_id)
-                remove_proxy_vote(msg_id)
+                remove_vote(self.guild_id, msg_id)
+                remove_proxy_vote(self.guild_id, msg_id)
 
 #=====投票選択肢選択=====
 class VoteOptionSelect(View):
     # クラスの初期設定
-    def __init__(self, msg_id, voter, agent_id):
+    def __init__(self, guild_id, msg_id, voter, agent_id):
+        votes = all_data[guild_id]["votes"]
         super().__init__()
         # msg_idプロパティにメッセージIDをセット
         self.msg_id = msg_id
@@ -1161,6 +1250,8 @@ class VoteOptionSelect(View):
         self.voter = voter
         # agentプロパティに代理人をセット
         self.agent_id = agent_id
+        # guild_idプロパティにサーバーidをセット
+        self.guild_id = guild_id
 
         #選択リストの定義
         options = []
@@ -1194,7 +1285,7 @@ class VoteOptionSelect(View):
         
         opt_idx = [int(opt_str) for opt_str in interaction.data["values"]]
         
-        add_proxy_vote(self.msg_id, self.voter, self.agent_id, opt_idx)
+        add_proxy_vote(self.guild_id, self.msg_id, self.voter, self.agent_id, opt_idx)
         agent = guild.get_member(self.agent_id)
         agent_display_name = agent.nick or agent.display_name or agent.name
         await interaction.message.edit(content=f"**{agent_display_name}** から **{self.voter}** の分の投票を受け付けたよ🫡")
@@ -1202,12 +1293,14 @@ class VoteOptionSelect(View):
 #=====追加選択肢入力=====
 class AddOptionInput(discord.ui.Modal):
     # クラスの初期設定
-    def __init__(self, msg_id, lim):
+    def __init__(self, guild_id, msg_id, lim):
         super().__init__(title="追加する選択肢を入力してね")
         # msg_idプロパティにメッセージIDをセット
         self.msg_id = msg_id
         # limプロパティに選択肢追加上限をセット
         self.lim = lim
+        # guild_idプロパティにサーバーidをセット
+        self.guild_id = guild_id
         
         # ModalUIの定義
         self.inputs = []
@@ -1222,6 +1315,7 @@ class AddOptionInput(discord.ui.Modal):
     # 選択肢入力後の処理
     async def callback(self, interaction: discord.Interaction):
         print("[start: on submit]")
+        votes = all_data[self.guild_id]["votes"]
         await interaction.response.defer()
         await interaction.message.edit(content=f"{bot.user.display_name}が考え中…🤔", view=None)
         # 追加選択肢をリスト化
@@ -1253,7 +1347,7 @@ class AddOptionInput(discord.ui.Modal):
         await interaction.message.edit(content=f"投票に選択肢を追加したよ🫡\n{message.jump_url}")
 
         # 辞書の更新
-        add_vote(self.msg_id, question, reactions, options)
+        add_vote(self.guild_id, self.msg_id, question, reactions, options)
 
 #=====投票選択モード切替=====
 class VoteSelectMode(Enum):
@@ -1270,26 +1364,44 @@ class VoteSelectMode(Enum):
 # Bot起動時処理
 @bot.event
 async def on_ready():
-    print(f"Botを起動: {bot.user}")
+    print(f"Bot started: {bot.user}")
+
+    # 統合辞書に登録されていないサーバーの場合は辞書を初期化
+    for guild in bot.guilds:
+        preset_dict(guild.id)
     
     # リマインダーループの開始
-    print(f"ループ開始: {datetime.now(JST)}")
+    print(f"[start loop: {datetime.now(JST)}]")
     bot.loop.create_task(reminder_loop())
+
+# 新規サーバー導入時処理
+@bot.event
+async def on_guild_join():
+    print("[start: on_guild_join]")
+    # 統合辞書に登録されていないサーバーの場合は辞書を初期化
+    for guild in bot.guilds:
+        preset_dict(guild.id)
 
 #  メッセージ受信時処理
 @bot.event
-async def on_message(message):
+async def on_message(message): 
     print("[start: on_message]")
-    
     # Botのメッセージは無視
     if message.author.bot:
         return
+    if message.guild is None:
+        print("message.guild is None")
+        return
+    make_list_channels = all_data[message.guild.id]["make_list_channels"]
+    rec_sessions = all_data[message.guild.id]["rec_sessions"]
     # コマンドは実行して終了
     if message.content.startswith("!"):
         await bot.process_commands(message)
         return
     # メッセージがリスト化対象チャンネルに投稿された場合、リスト化処理を行う
-    if message.channel.id in make_list_channels["channels"]:
+    print(f"message.channel.id: {message.channel.id}")
+    print(f"make_list_channels: {make_list_channels}")
+    if message.channel.id in make_list_channels:
         await handle_make_list(message)
     # 録音実施中かつ、メッセージが録音実行チャンネルに投稿された場合は録音ログに追加
     vc = message.guild.voice_client
@@ -1306,6 +1418,53 @@ async def on_message(message):
 #===============
 # コマンド定義
 #===============
+#---------------
+# 統合辞書移行関係
+#---------------
+#=====move_dict コマンド=====
+@bot.command()
+async def move_dict(ctx):
+    guild_id = ctx.guild.id
+    all_data[ctx.guild.id] = {}
+    if reminders:
+        all_data[guild_id]["reminders"] = reminders
+    else:
+        all_data[guild_id]["reminders"] = {}
+    print(f'reminders: {reminders}')
+    print(f'all_data[guild_id]["reminders"]: {all_data[guild_id]["reminders"]}')
+    
+    if votes:
+        all_data[guild_id]["votes"] = votes
+    else:
+        all_data[guild_id]["votes"] = {}
+    print(f'votes: {votes}')
+    print(f'all_data[guild_id]["votes"]: {all_data[guild_id]["votes"]}')
+
+    if proxy_votes:
+        all_data[guild_id]["proxy_votes"] = proxy_votes
+    else:
+        all_data[guild_id]["proxy_votes"] = {}
+    print(f'proxy_votes: {proxy_votes}')
+    print(f'all_data[guild_id]["proxy_votes"]: {all_data[guild_id]["proxy_votes"]}')
+
+    if make_list_channels:
+        all_data[guild_id]["make_list_channels"] = make_list_channels["channels"] or []
+    else:
+        all_data[guild_id]["make_list_channels"] = []
+    print(f'make_list_channels: {make_list_channels}')
+    print(f'all_data[guild_id]["make_list_channels"]: {all_data[guild_id]["make_list_channels"]}')
+
+    if rec_sessions:
+        all_data[guild_id]["rec_sessions"] = rec_sessions
+    else:
+        all_data[guild_id]["rec_sessions"] = {}
+    
+    print(f"all_data: {all_data}")
+    save_all_data()
+
+    await ctx.message.delete()
+    await ctx.send(f"統合辞書への移行が完了したよ🫡")
+
 #---------------
 # リマインダー関係
 #---------------
@@ -1328,6 +1487,7 @@ async def remind(
     ),
     interval: discord.Option(int, description="繰り返し間隔", default=0)
 ):
+    reminders = all_data[ctx.guild.id]["reminders"]
     print(f"channel: {channel}")
     # 文字列引数からdatatime型に変換
     dt = datetime.strptime(f"{date} {time}", "%Y/%m/%d %H:%M").replace(tzinfo=JST)
@@ -1344,7 +1504,7 @@ async def remind(
         return
     
     # add_reminder関数に渡す
-    add_reminder(dt, repeat, interval, channel_id, msg)
+    add_reminder(ctx.guild.id, dt, repeat, interval, channel_id, msg)
 
     await ctx.interaction.response.send_message(
         content=f"**{dt.strftime('%Y/%m/%d %H:%M')}** にリマインダーをセットしたよ🫡",
@@ -1354,6 +1514,7 @@ async def remind(
 #=====/reminder_list コマンド=====
 @bot.slash_command(name="reminder_list", description="リマインダーの一覧を表示するよ")
 async def reminder_list(ctx: discord.ApplicationContext):
+    reminders = all_data[ctx.guild.id]["reminders"]
     # 空のリストを作成
     items = []
 
@@ -1382,6 +1543,7 @@ async def reminder_list(ctx: discord.ApplicationContext):
 #=====/reminder_delete コマンド=====
 @bot.slash_command(name="reminder_delete", description="リマインダーを削除するよ")
 async def reminder_delete(ctx: discord.ApplicationContext):
+    reminders = all_data[ctx.guild.id]["reminders"]
     # リマインダーが設定されている場合、選択メニューを表示
     if reminders:
         view = ReminderSelect(reminders)
@@ -1409,7 +1571,6 @@ async def vote(ctx: discord.ApplicationContext,
     opt_9: discord.Option(str,description="9番目の選択肢を書いてね", required=False),
     opt_10: discord.Option(str,description="10番目の選択肢を書いてね", required=False)
 ): 
-
     # 選択肢をリストに格納
     raw_opts = [opt_1, opt_2, opt_3, opt_4, opt_5, opt_6, opt_7, opt_8, opt_9, opt_10]
     opts = [opt for opt in raw_opts if not isinstance(opt, discord.Option)]
@@ -1432,13 +1593,14 @@ async def vote(ctx: discord.ApplicationContext,
         await message.add_reaction(reactions[i])
     
     # 辞書に保存
-    add_vote(message.id, question, reactions, options)
+    add_vote(ctx.guild.id, message.id, question, reactions, options)
 
 #=====/vote_add_option コマンド=====
 @bot.slash_command(name="vote_add_option", description="投票に選択肢を追加するよ")
 async def vote_add_option(ctx: discord.ApplicationContext):
+    votes = all_data[ctx.guild.id]["votes"]
     if votes:
-        view = VoteSelect(mode=VoteSelectMode.ADD_OPTION, voter=None, agent_id=None)
+        view = VoteSelect(guild_id=ctx.guild.id, mode=VoteSelectMode.ADD_OPTION, voter=None, agent_id=None)
         await ctx.interaction.response.send_message("選択肢を追加する投票を選んでね", view=view)
     # 投票がない場合のメッセージ
     else:
@@ -1455,12 +1617,13 @@ async def vote_result(
         ]
     )
 ):
+    votes = all_data[ctx.guild.id]["votes"]
     if votes:
         if mode == "mid":
-            view = VoteSelect(mode=VoteSelectMode.MID_RESULT, voter=None, agent_id=None)
+            view = VoteSelect(guild_id=ctx.guild.id, mode=VoteSelectMode.MID_RESULT, voter=None, agent_id=None)
             await ctx.interaction.response.send_message("どの投票結果を表示するか選んでね", view=view)
         elif mode == "final":
-            view = VoteSelect(mode=VoteSelectMode.FINAL_RESULT, voter=None, agent_id=None)
+            view = VoteSelect(guild_id=ctx.guild.id, mode=VoteSelectMode.FINAL_RESULT, voter=None, agent_id=None)
             await ctx.interaction.response.send_message("どの投票結果を表示するか選んでね", view=view)
         else:
             await ctx.interaction.response.send_message("⚠️選択モードの指定がまちがってるよ", ephemeral=True)
@@ -1472,9 +1635,10 @@ async def vote_result(
 #=====/proxy_vote コマンド=====
 @bot.slash_command(name="proxy_vote", description="本人の代わりに代理投票するよ")
 async def proxy_vote(ctx: discord.ApplicationContext, voter: str = discord.Option(description="投票する本人の名前を書いてね")):
+    votes = all_data[ctx.guild.id]["votes"]
     if votes:
         agent_id = ctx.interaction.user.id
-        view = VoteSelect(mode=VoteSelectMode.PROXY_VOTE, voter=voter, agent_id=agent_id)
+        view = VoteSelect(guild_id=ctx.guild.id, mode=VoteSelectMode.PROXY_VOTE, voter=voter, agent_id=agent_id)
         await ctx.interaction.response.send_message("どの投票に代理投票するか選んでね", view=view)
     else:
         await ctx.interaction.response.send_message("⚠️代理投票できる投票がないよ", ephemeral=True)
@@ -1482,9 +1646,10 @@ async def proxy_vote(ctx: discord.ApplicationContext, voter: str = discord.Optio
 #=====/cancel_proxy コマンド=====
 @bot.slash_command(name="cancel_proxy", description="投票済みの代理投票を取り消すよ")
 async def cancel_proxy(ctx: discord.ApplicationContext, voter: str = discord.Option(description="投票者名")):
+    votes = all_data[ctx.guild.id]["votes"]
     if votes:
         agent_id = ctx.interaction.user.id
-        view = VoteSelect(mode=VoteSelectMode.CANCEL_PROXY_VOTE, voter=voter, agent_id=agent_id)
+        view = VoteSelect(guild_id=ctx.guild.id, mode=VoteSelectMode.CANCEL_PROXY_VOTE, voter=voter, agent_id=agent_id)
         await ctx.interaction.response.send_message("代理投票を取り消しする投票を選んでね", view=view)
     else:
         await ctx.interaction.response.send_message("⚠️取り消しできる投票がないよ", ephemeral=True)
@@ -1492,8 +1657,9 @@ async def cancel_proxy(ctx: discord.ApplicationContext, voter: str = discord.Opt
 #=====!delete_vote コマンド====
 @bot.command()
 async def delete_vote(ctx):
+    votes = all_data[ctx.guild.id]["votes"]
     if votes:
-        view = VoteSelect(mode=VoteSelectMode.DELETE_VOTE, voter=None, agent_id=None)
+        view = VoteSelect(guild_id=ctx.guild.id, mode=VoteSelectMode.DELETE_VOTE, voter=None, agent_id=None)
         await ctx.message.delete()
         await ctx.send("どの投票を削除するか選んでね", view=view)
     else:
@@ -1635,7 +1801,7 @@ async def add_listed_ch(ctx):
     channel_name = ctx.channel.name
 
     # リスト化対象チャンネル辞書に登録
-    add_make_list_channel(channel_id)
+    add_make_list_channel(ctx.guild.id, channel_id)
     
     await ctx.message.delete()
     await ctx.send(f"{channel_name}をリスト化対象にしたよ🫡\n今後は改行ごとに別の項目としてリスト化されるよ\nリストから削除する場合は、ロングタップ(PCの場合は右クリック)して、アプリ→**remove_from_list**で削除できるよ\n---")
@@ -1648,7 +1814,7 @@ async def remove_listed_ch(ctx):
     channel_name = ctx.channel.name
 
     # リスト化対象チャンネル辞書から削除
-    remove_ch = remove_make_list_channel(channel_id, channel_name)
+    remove_ch = remove_make_list_channel(ctx.guild.id, channel_id, channel_name)
     
     if remove_ch:
         await ctx.message.delete()
@@ -1660,8 +1826,9 @@ async def remove_listed_ch(ctx):
 #=====remove_from_list コマンド=====
 @bot.message_command(name="remove_from_list")
 async def remove_from_list(ctx: discord.ApplicationContext, message: discord.Message):
+    make_list_channels = all_data[ctx.guild.id]["make_list_channels"]
     # リスト化対象チャンネル内なら項目を削除
-    if message.channel.id in make_list_channels["channels"]:
+    if message.channel.id in make_list_channels:
         await message.delete()
         await ctx.interaction.response.send_message(content=f"{message.content}を削除したよ🫡", ephemeral=True)
     # リスト化対象チャンネル以外ならエラーを返す
@@ -1703,7 +1870,7 @@ async def recstart(ctx):
     )
 
     # 録音セッション辞書にチャンネルIDを追加
-    add_rec_session(ctx.channel.id)
+    add_rec_session(ctx.guild.id, ctx.channel.id)
 
     await ctx.send("⏺録音を開始したよ🫡")
 
@@ -1722,5 +1889,4 @@ async def recstop(ctx):
             await ctx.send("⚠️いまは録音してないよ")
 
 # Botを起動
-
 bot.run(os.getenv("DISCORD_TOKEN"))
