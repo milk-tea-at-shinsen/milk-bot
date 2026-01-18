@@ -203,10 +203,6 @@ def export_data(data: dict, name: str):
         if os.path.exists(f"/mnt/data/{name}.json"):
             # 内容を表示
             with open(f"/mnt/data/{name}.json", "r", encoding = "utf-8") as file:
-                print(f"saved dict:")
-                print(file.read())
-                print("---------------")
-
     except Exception as e:
         print(f"saving dict error: {e}")
 
@@ -1398,6 +1394,7 @@ async def on_message(message):
     make_list_channels = all_data[message.guild.id]["make_list_channels"]
     rec_sessions = all_data[message.guild.id]["rec_sessions"]
     if message.guild is None:
+        print("message.guild is None")
         return
     # Botのメッセージは無視
     if message.author.bot:
