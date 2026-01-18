@@ -87,24 +87,24 @@ def load_data(data):
 #=====各辞書読込前処理=====
 #---統合辞書---
 raw_data = load_data("all_data")
-#try:
-if raw_data:
-    print("exist raw_data")
-    all_data = {int(key): value for key, value in raw_data.items()}
-    print(f"all_data: {all_data}")
-    for guild_id, guild_dict in all_data.items():
-        # リマインダー辞書キーのdtをdatetime型に戻す
-        all_data[guild_id]["reminders"] = {datetime.fromisoformat(key): value for key, value in guild_dict["reminders"].items()}
-        # 投票辞書キーのmsg_idをint型に戻す
-        all_data[guild_id]["votes"] = {int(key): value for key, value in guild_dict["votes"].items()}
-        # 代理投票辞書キーのmsg_idをint型に戻す
-        all_data[guild_id]["proxy_votes"] = {int(key): value for key, value in guild_dict["proxy_votes"].items()}
-else:
-    print("not exist raw_data")
+try:
+    if raw_data:
+        print("exist raw_data")
+        all_data = {int(key): value for key, value in raw_data.items()}
+        print(f"all_data: {all_data}")
+        for guild_id, guild_dict in all_data.items():
+            # リマインダー辞書キーのdtをdatetime型に戻す
+            all_data[guild_id]["reminders"] = {datetime.fromisoformat(key): value for key, value in guild_dict["reminders"].items()}
+            # 投票辞書キーのmsg_idをint型に戻す
+            all_data[guild_id]["votes"] = {int(key): value for key, value in guild_dict["votes"].items()}
+            # 代理投票辞書キーのmsg_idをint型に戻す
+            all_data[guild_id]["proxy_votes"] = {int(key): value for key, value in guild_dict["proxy_votes"].items()}
+    else:
+        print("not exist raw_data")
+        all_data = {}
+except Exception as e:
+    print(f"raw_data convert error: {e}")
     all_data = {}
-#except Exception as e:
-    #print(f"raw_data convert error: {e}")
-    #all_data = {}
 
 print(f"dict all_data: {all_data}")
 
@@ -198,11 +198,6 @@ def export_data(data: dict, name: str):
             # jsonファイルを保存
             json.dump(data, file, ensure_ascii=False, indent=2)
         print(f"saved dict: {datetime.now(JST)} - {name}")
-
-        # jsonが存在すれば
-        if os.path.exists(f"/mnt/data/{name}.json"):
-            # 内容を表示
-            with open(f"/mnt/data/{name}.json", "r", encoding = "utf-8") as file:
     except Exception as e:
         print(f"saving dict error: {e}")
 
