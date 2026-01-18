@@ -1,0 +1,38 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_IP }}
+          username: root
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            if [ "${{ github.ref_name }}" = "main" ]; then
+              TARGET_DIR="~/mybot"
+              SERVICE_NAME="mybot.service"
+            else
+              TARGET_DIR="~/devbot"
+              SERVICE_NAME="devbot.service"
+            fi
+
+            cd $TARGET_DIR
+            git pull origin ${{ github.ref_name }}
+            # 仮想環境がある前提でライブラリ更新
+            if [ -f "requirements.txt" ]; then
+              ./venv/bin/pip install -r requirements.txt
+            fi
+            # Botの再起動
+            sudo systemctl restart $SERVICE_NAME
