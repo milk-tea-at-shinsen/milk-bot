@@ -91,6 +91,7 @@ try:
     if raw_data:
         print("exist raw_data")
         all_data = {int(key): value for key, value in raw_data.items()}
+        print(f"all_data: {all_data}")
         for guild_id, guild_dict in all_data.items():
             # リマインダー辞書キーのdtをdatetime型に戻す
             all_data[guild_id]["reminders"] = {datetime.fromisoformat(key): value for key, value in raw_data[guild_id]["reminders"].items()}
@@ -101,9 +102,9 @@ try:
     else:
         print("not exist raw_data")
         all_data = {}
-except Exception as e:
-    print(f"raw_data convert error: {e}")
-    all_data = {}
+#except Exception as e:
+    #print(f"raw_data convert error: {e}")
+all_data = {}
 
 print(f"dict all_data: {all_data}")
 
