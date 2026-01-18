@@ -1399,6 +1399,8 @@ async def on_message(message):
         await bot.process_commands(message)
         return
     # メッセージがリスト化対象チャンネルに投稿された場合、リスト化処理を行う
+    print(f"message.channel.id: {message.channel.id}")
+    print(f"make_list_channels: {make_list_channels}")
     if message.channel.id in make_list_channels:
         await handle_make_list(message)
     # 録音実施中かつ、メッセージが録音実行チャンネルに投稿された場合は録音ログに追加
