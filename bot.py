@@ -1012,7 +1012,7 @@ def write_vc_log(ctx, channel_id, start_time):
         return filename
 
 #=====録音後処理=====
-async def after_recording(ctx, sink, channel: discord.TextChannel, start_time: datetime, *args):
+async def after_recording(sink, channel: discord.TextChannel, start_time: datetime, ctx, *args):
     print("[start: after_recording]")
     rec_sessions = all_data[ctx.guild.id]["rec_sessions"]
     status_msg = await channel.send(f"{bot.user.display_name}が考え中…🤔")
@@ -1078,7 +1078,7 @@ async def after_recording(ctx, sink, channel: discord.TextChannel, start_time: d
         except Exception as e:
             print(f"error anlyzing voice from {user.nick or user.display_name or user.name}: {e}")
     
-    filename = write_vc_log(channel.id, start_time)
+    filename = write_vc_log(ctx, channel.id, start_time)
     text = make_gemini_text(channel.id)
     summerized_text = make_summery(text)
     print(f"summerized_text: {summerized_text}")
