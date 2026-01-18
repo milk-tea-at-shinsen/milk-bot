@@ -939,8 +939,8 @@ async def handle_make_list(message):
 # STT関係
 #---------------
 #=====要約用テキスト作成=====
-def make_gemini_text(ctx, channel_id):
-    rec_sessions = all_data[ctx.guild.id]["rec_sessions"]
+def make_gemini_text(guild_id, channel_id):
+    rec_sessions = all_data[guild_id]["rec_sessions"]
     lines = [f"{item['time'].strftime('%Y/%m/%d %H:%M:%S')} {item['name']}: {item['text']}" for item in rec_sessions[channel_id]]
     text = "\n".join(lines)
     return text
@@ -1080,7 +1080,7 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
             print(f"error anlyzing voice from {user.nick or user.display_name or user.name}: {e}")
     
     filename = write_vc_log(guild_id, channel.id, start_time)
-    text = make_gemini_text(channel.id)
+    text = make_gemini_text(guild_id, channel.id)
     summerized_text = make_summery(text)
     print(f"summerized_text: {summerized_text}")
 
