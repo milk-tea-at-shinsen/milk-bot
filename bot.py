@@ -104,7 +104,7 @@ else:
     all_data = {}
 #except Exception as e:
     #print(f"raw_data convert error: {e}")
-all_data = {}
+    #all_data = {}
 
 print(f"dict all_data: {all_data}")
 
