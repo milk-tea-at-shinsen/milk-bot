@@ -1386,14 +1386,14 @@ async def on_guild_join():
 @bot.event
 async def on_message(message): 
     print("[start: on_message]")
-    make_list_channels = all_data[message.guild.id]["make_list_channels"]
-    rec_sessions = all_data[message.guild.id]["rec_sessions"]
-    if message.guild is None:
-        print("message.guild is None")
-        return
     # Botのメッセージは無視
     if message.author.bot:
         return
+    if message.guild is None:
+        print("message.guild is None")
+        return
+    make_list_channels = all_data[message.guild.id]["make_list_channels"]
+    rec_sessions = all_data[message.guild.id]["rec_sessions"]
     # コマンドは実行して終了
     if message.content.startswith("!"):
         await bot.process_commands(message)
