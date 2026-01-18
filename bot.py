@@ -89,6 +89,7 @@ def load_data(data):
 raw_data = load_data("all_data")
 try:
     if raw_data:
+        print("exist raw_data")
         all_data = {int(key): value for key, value in raw_data.items()}
         for guild_id, guild_dict in all_data.items():
             # リマインダー辞書キーのdtをdatetime型に戻す
@@ -98,8 +99,10 @@ try:
             # 代理投票辞書キーのmsg_idをint型に戻す
             all_data[guild_id]["proxy_votes"] = {int(key): value for key, value in raw_data[guild_id]["proxy_votes"].items()}
     else:
+        print("not exist raw_data")
         all_data = {}
-except:
+except Exception as e:
+    print(f"raw_data convert error: {r}")
     all_data = {}
 
 print(f"dict all_data: {all_data}")
