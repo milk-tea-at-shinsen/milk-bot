@@ -939,8 +939,8 @@ async def handle_make_list(message):
 # STT関係
 #---------------
 #=====要約用テキスト作成=====
-def make_gemini_text(ctx, channel_id):
-    rec_sessions = all_data[ctx.guild.id]["rec_sessions"]
+def make_gemini_text(guild_id, channel_id):
+    rec_sessions = all_data[guild_id]["rec_sessions"]
     lines = [f"{item['time'].strftime('%Y/%m/%d %H:%M:%S')} {item['name']}: {item['text']}" for item in rec_sessions[channel_id]]
     text = "\n".join(lines)
     return text
@@ -960,19 +960,19 @@ def make_summery(text):
 - 全体の文字数は、Markdown記法や空白などを含めて最大4000文字以内に収めてください
 
 --- 出力内容 ---
-#### 会議概要
+### 会議概要
 - 日時、参加者を記載
-#### 議題
+### 議題
 - 会議の主なテーマを記載
-#### 議事概要
+### 議事概要
 - 議事内容を構造化し、要約して箇条書きで記載
-#### 決定事項
+### 決定事項
 - 合意・決定した事項や次回までの検討事項を記載
 - 該当がない場合は「特になし」と記載
 
 --- 出力フォーマット ---
 - Markdown記法で記載してください
-- 見出しのレベルは####を使用し、####の後に半角スペースを入れてください
+- 見出しのレベルは###を使用し、###の後に半角スペースを入れてください
 - 箇条書きには-を使用し、-の後に半角スペースを入れてください
 - コードブロック(```)は使用しないでください
 
@@ -986,9 +986,9 @@ def make_summery(text):
     return response.text
 
 #=====vcログ作成=====
-def write_vc_log(ctx, channel_id, start_time):
+def write_vc_log(guild_id, channel_id, start_time):
     print("[start: write_vc_log]")
-    rec_sessions = all_data[ctx.guild.id]["rec_sessions"]
+    rec_sessions = all_data[guild_id]["rec_sessions"]
 
     if channel_id in rec_sessions:
         sessions = rec_sessions[channel_id]
@@ -1012,9 +1012,10 @@ def write_vc_log(ctx, channel_id, start_time):
         return filename
 
 #=====録音後処理=====
-async def after_recording(ctx, sink, channel: discord.TextChannel, start_time: datetime, *args):
+async def after_recording(sink, channel: discord.TextChannel, start_time: datetime, *args):
     print("[start: after_recording]")
-    rec_sessions = all_data[ctx.guild.id]["rec_sessions"]
+    guild_id = channel.guild.id
+    rec_sessions = all_data[guild_id]["rec_sessions"]
     status_msg = await channel.send(f"{bot.user.display_name}が考え中…🤔")
     await asyncio.sleep(2)
 
@@ -1078,8 +1079,8 @@ async def after_recording(ctx, sink, channel: discord.TextChannel, start_time: d
         except Exception as e:
             print(f"error anlyzing voice from {user.nick or user.display_name or user.name}: {e}")
     
-    filename = write_vc_log(channel.id, start_time)
-    text = make_gemini_text(channel.id)
+    filename = write_vc_log(guild_id, channel.id, start_time)
+    text = make_gemini_text(guild_id, channel.id)
     summerized_text = make_summery(text)
     print(f"summerized_text: {summerized_text}")
 
@@ -1094,7 +1095,7 @@ async def after_recording(ctx, sink, channel: discord.TextChannel, start_time: d
     await channel.send(content="VCのログを作成したよ🫡", file=discord.File(filename))
     
     # 録音セッション辞書からチャンネルIDを削除
-    remove_rec_session(ctx.guild.id, channel.id, channel.name)
+    remove_rec_session(guild_id, channel.id, channel.name)
     
 #===============
 # クラス定義
