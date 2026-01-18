@@ -194,7 +194,15 @@ def export_data(data: dict, name: str):
             # jsonファイルを保存
             json.dump(data, file, ensure_ascii=False, indent=2)
         print(f"saved dict: {datetime.now(JST)} - {name}")
-        print(f"saved dict: {name}: {data}")
+
+        # jsonが存在すれば
+        if os.path.exists(f"/mnt/data/{name}.json"):
+            # 内容を表示
+            with open(f"/mnt/data/{name}.json", "r", encoding = "utf-8") as file:
+                print(f"saved dict:")
+                print(file.read())
+                print("---------------")
+
     except Exception as e:
         print(f"saving dict error: {e}")
 
