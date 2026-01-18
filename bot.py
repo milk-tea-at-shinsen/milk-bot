@@ -102,7 +102,7 @@ try:
         print("not exist raw_data")
         all_data = {}
 except Exception as e:
-    print(f"raw_data convert error: {r}")
+    print(f"raw_data convert error: {e}")
     all_data = {}
 
 print(f"dict all_data: {all_data}")
