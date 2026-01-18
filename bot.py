@@ -986,9 +986,9 @@ def make_summery(text):
     return response.text
 
 #=====vcログ作成=====
-def write_vc_log(ctx, channel_id, start_time):
+def write_vc_log(guild_id, channel_id, start_time):
     print("[start: write_vc_log]")
-    rec_sessions = all_data[ctx.guild.id]["rec_sessions"]
+    rec_sessions = all_data[guild_id]["rec_sessions"]
 
     if channel_id in rec_sessions:
         sessions = rec_sessions[channel_id]
@@ -1012,9 +1012,10 @@ def write_vc_log(ctx, channel_id, start_time):
         return filename
 
 #=====録音後処理=====
-async def after_recording(sink, channel: discord.TextChannel, start_time: datetime, ctx, *args):
+async def after_recording(sink, channel: discord.TextChannel, start_time: datetime, *args):
     print("[start: after_recording]")
-    rec_sessions = all_data[ctx.guild.id]["rec_sessions"]
+    guild_id = channel.guild.id
+    rec_sessions = all_data[guild_id]["rec_sessions"]
     status_msg = await channel.send(f"{bot.user.display_name}が考え中…🤔")
     await asyncio.sleep(2)
 
@@ -1078,7 +1079,7 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
         except Exception as e:
             print(f"error anlyzing voice from {user.nick or user.display_name or user.name}: {e}")
     
-    filename = write_vc_log(ctx, channel.id, start_time)
+    filename = write_vc_log(guild_id, channel.id, start_time)
     text = make_gemini_text(channel.id)
     summerized_text = make_summery(text)
     print(f"summerized_text: {summerized_text}")
@@ -1094,7 +1095,7 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
     await channel.send(content="VCのログを作成したよ🫡", file=discord.File(filename))
     
     # 録音セッション辞書からチャンネルIDを削除
-    remove_rec_session(ctx.guild.id, channel.id, channel.name)
+    remove_rec_session(guild_id, channel.id, channel.name)
     
 #===============
 # クラス定義
