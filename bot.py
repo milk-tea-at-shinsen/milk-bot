@@ -1828,7 +1828,7 @@ async def remove_listed_ch(ctx):
 async def remove_from_list(ctx: discord.ApplicationContext, message: discord.Message):
     make_list_channels = all_data[ctx.guild.id]["make_list_channels"]
     # リスト化対象チャンネル内なら項目を削除
-    if message.channel.id in make_list_channels["channels"]:
+    if message.channel.id in make_list_channels:
         await message.delete()
         await ctx.interaction.response.send_message(content=f"{message.content}を削除したよ🫡", ephemeral=True)
     # リスト化対象チャンネル以外ならエラーを返す
