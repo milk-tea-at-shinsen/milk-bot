@@ -1448,7 +1448,7 @@ async def move_dict(ctx):
     print(f'all_data[guild_id]["proxy_votes"]: {all_data[guild_id]["proxy_votes"]}')
 
     if make_list_channels:
-        all_data[guild_id]["make_list_channels"] = make_list_channels.values()
+        all_data[guild_id]["make_list_channels"] = make_list_channels["channels"] or []
     else:
         all_data[guild_id]["make_list_channels"] = []
     print(f'make_list_channels: {make_list_channels}')
