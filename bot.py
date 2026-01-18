@@ -94,11 +94,11 @@ if raw_data:
     print(f"all_data: {all_data}")
     for guild_id, guild_dict in all_data.items():
         # リマインダー辞書キーのdtをdatetime型に戻す
-        all_data[guild_id]["reminders"] = {datetime.fromisoformat(key): value for key, value in raw_data[guild_id]["reminders"].items()}
+        all_data[guild_id]["reminders"] = {datetime.fromisoformat(key): value for key, value in guild_data["reminders"].items()}
         # 投票辞書キーのmsg_idをint型に戻す
-        all_data[guild_id]["votes"] = {int(key): value for key, value in raw_data[guild_id]["votes"].items()}
+        all_data[guild_id]["votes"] = {int(key): value for key, value in guild_data["votes"].items()}
         # 代理投票辞書キーのmsg_idをint型に戻す
-        all_data[guild_id]["proxy_votes"] = {int(key): value for key, value in raw_data[guild_id]["proxy_votes"].items()}
+        all_data[guild_id]["proxy_votes"] = {int(key): value for key, value in guild_data["proxy_votes"].items()}
 else:
     print("not exist raw_data")
     all_data = {}
