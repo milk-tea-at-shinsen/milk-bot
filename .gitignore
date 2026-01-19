@@ -1,0 +1,6 @@
+*.json
+*.pem
+.env
+node_modules/
+env.txt
+devenv.txt
