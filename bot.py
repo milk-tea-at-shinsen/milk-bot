@@ -1473,7 +1473,8 @@ async def move_dict(ctx):
 @bot.command()
 async def dict_export(ctx):
     filename = "/mnt/data/all_data.json"
-    await ctx.message.respond("統合辞書のjsonファイルだよ🫡", file=discord.File(filename))
+    await ctx.message.delete()
+    await ctx.send("統合辞書のjsonファイルだよ🫡", file=discord.File(filename))
 
 #---------------
 # リマインダー関係
