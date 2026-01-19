@@ -23,6 +23,14 @@ from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 import ctypes
 import ctypes.util
 from pydub import AudioSegment, effects
+from dotenv import load_dotenv
+
+load_dotenv()
+print("--- ENV DEBUG ---")
+print(f"Current Directory: {os.getcwd()}")
+print(f"GOOGLE_APPLICATION_CREDENTIALS_JSON: {os.environ.get('GOOGLE_APPLICATION_CREDENTIALS_JSON')}")
+print(f"All Keys: {list(os.environ.keys())}")
+print("-----------------")
 
 #=====Botの準備=====
 intents = discord.Intents.default()
@@ -50,7 +58,9 @@ if not discord.opus.is_loaded():
 
 #=====サービスアカウントキーの読込=====
 #---Vision API---
-info = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
+key_path = os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"]
+with open(key_path, 'r') as f:
+    info = json.load(f)
 credentials = service_account.Credentials.from_service_account_info(info)
 vision_client = vision.ImageAnnotatorClient(credentials=credentials)
 
