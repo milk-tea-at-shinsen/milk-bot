@@ -26,6 +26,11 @@ from pydub import AudioSegment, effects
 from dotenv import load_dotenv
 
 load_dotenv()
+print("--- ENV DEBUG ---")
+print(f"Current Directory: {os.getcwd()}")
+print(f"GOOGLE_APPLICATION_CREDENTIALS_JSON: {os.environ.get('GOOGLE_APPLICATION_CREDENTIALS_JSON')}")
+print(f"All Keys: {list(os.environ.keys())}")
+print("-----------------")
 
 #=====Botの準備=====
 intents = discord.Intents.default()
