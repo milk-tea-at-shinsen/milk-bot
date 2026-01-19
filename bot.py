@@ -58,7 +58,9 @@ if not discord.opus.is_loaded():
 
 #=====サービスアカウントキーの読込=====
 #---Vision API---
-info = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
+key_path = os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"]
+with open(key_path, 'r') as f:
+    info = json.load(f)
 credentials = service_account.Credentials.from_service_account_info(info)
 vision_client = vision.ImageAnnotatorClient(credentials=credentials)
 
