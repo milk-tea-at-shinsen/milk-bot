@@ -34,14 +34,17 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 print(f"Pycord version: {discord.__version__}")
 
 if not discord.opus.is_loaded():
+    print("[start: opus force load]")
     try:
         # Nixpacksが設定するライブラリパスの中からlibopusを探す
         lib_path = ctypes.util.find_library('opus')
         if lib_path:
             discord.opus.load_opus(lib_path)
+            print("[opus force load from lib path]")
         else:
             # 見つからない場合の「決め打ち」パス（Nixpacksの標準的な配置）
             discord.opus.load_opus('/usr/lib/libopus.so.0')
+            print("[opus force load from full path]")
     except Exception as e:
         print(f"Opus loading error: {e}")
 
@@ -108,49 +111,49 @@ except Exception as e:
 
 print(f"dict all_data: {all_data}")
 
-#---リマインダー辞書---
-raw_data = load_data("reminders")
-try:
-    if raw_data:
-        reminders = {datetime.fromisoformat(key): value for key, value in raw_data.items()}
-    else:
-        reminders = {}
-except:
-    reminders = {}
+# #---リマインダー辞書---
+# raw_data = load_data("reminders")
+# try:
+#     if raw_data:
+#         reminders = {datetime.fromisoformat(key): value for key, value in raw_data.items()}
+#     else:
+#         reminders = {}
+# except:
+#     reminders = {}
     
-print(f"dict reminders: {reminders}")
+# print(f"dict reminders: {reminders}")
 
-#---投票辞書---
-raw_data = load_data("votes")
-if raw_data:
-    votes = {int(key): value for key, value in raw_data.items()}
-else:
-    votes = {}
-print(f"dict votes: {votes}")
+# #---投票辞書---
+# raw_data = load_data("votes")
+# if raw_data:
+#     votes = {int(key): value for key, value in raw_data.items()}
+# else:
+#     votes = {}
+# print(f"dict votes: {votes}")
 
-#---代理投票辞書---
-raw_data = load_data("proxy_votes")
-try:
-    if raw_data:
-        proxy_votes = {int(key): value for key, value in raw_data.items()}
-    else:
-        proxy_votes = {}
-except:
-    proxy_votes = {}
+# #---代理投票辞書---
+# raw_data = load_data("proxy_votes")
+# try:
+#     if raw_data:
+#         proxy_votes = {int(key): value for key, value in raw_data.items()}
+#     else:
+#         proxy_votes = {}
+# except:
+#     proxy_votes = {}
     
-print(f"dict proxy_votes: {proxy_votes}")
+# print(f"dict proxy_votes: {proxy_votes}")
 
-#---リスト化対象チャンネル辞書---
-raw_data = load_data("make_list_channels")
-try:
-    if raw_data:
-        make_list_channels = {key: value for key, value in raw_data.items()}
-    else:
-        make_list_channels = {"channels": []}
-except:
-    make_list_channels = {"channels": []}
+# #---リスト化対象チャンネル辞書---
+# raw_data = load_data("make_list_channels")
+# try:
+#     if raw_data:
+#         make_list_channels = {key: value for key, value in raw_data.items()}
+#     else:
+#         make_list_channels = {"channels": []}
+# except:
+#     make_list_channels = {"channels": []}
 
-print(f"dict make_list_channels: {make_list_channels}")
+# print(f"dict make_list_channels: {make_list_channels}")
 
 #---録音セッション---
 rec_sessions = {}
@@ -1420,7 +1423,7 @@ async def on_message(message):
 # コマンド定義
 #===============
 #---------------
-# 統合辞書移行関係
+# 管理関係
 #---------------
 #=====move_dict コマンド=====
 @bot.command()
@@ -1465,6 +1468,12 @@ async def move_dict(ctx):
 
     await ctx.message.delete()
     await ctx.send(f"統合辞書への移行が完了したよ🫡")
+
+#=====dict_export コマンド=====
+@bot.command()
+async def dict_export(ctx):
+    filename = "/mnt/data/all_data.json"
+    await ctx.respond("統合辞書のjsonファイルだよ🫡", file=discord.File(filename))
 
 #---------------
 # リマインダー関係
