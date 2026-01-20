@@ -261,7 +261,6 @@ def add_reminder(guild_id, dt, repeat, interval, channel_id, msg):
          "msg": msg}
     )
     # json保存前処理
-    #save_reminders()
     save_all_data()
 
 #---投票辞書---
@@ -275,7 +274,6 @@ def add_vote(guild_id, msg_id, question, reactions, options):
     }
 
     # json保存前処理
-    # save_votes()
     save_all_data()
 
 #---代理投票辞書---
@@ -293,7 +291,6 @@ def add_proxy_vote(guild_id, msg_id, voter, agent_id, opt_idx):
     }
 
     # json保存前処理
-    # save_proxy_votes()
     save_all_data()
 
 #---リスト化対象チャンネル辞書---
@@ -305,7 +302,6 @@ def add_make_list_channel(guild_id, channel_id):
         print(f"make_list_channels: {make_list_channels}")
 
     # json保存前処理
-    #save_make_list_channels()
     save_all_data()
 
 #---録音セッション辞書---
