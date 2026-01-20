@@ -1881,6 +1881,7 @@ async def recstart(ctx):
     start_time = datetime.now(JST)
 
     # 録音開始
+    # 渡すチャンネルはコマンド実行チャンネル
     vc.start_recording(
         discord.sinks.WaveSink(),
         after_recording,
@@ -1888,7 +1889,7 @@ async def recstart(ctx):
         start_time
     )
 
-    # 録音セッション辞書にチャンネルIDを追加
+    # 録音セッション辞書にコマンド実行チャンネルのIDを追加
     add_rec_session(ctx.guild.id, ctx.channel.id)
 
     await ctx.send("⏺録音を開始したよ🫡")
