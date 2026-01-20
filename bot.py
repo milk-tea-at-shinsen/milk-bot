@@ -429,6 +429,17 @@ def make_csv(filename, rows, meta=None, header=None):
         # rowsの書込
         writer.writerows(rows)
 
+#=====一時ファイルの削除=====
+def remove_tmp_file(filename: str):
+    try:
+        if filename and os.path.exists(filename):
+            os.remove(filename)
+            print(f"removed: {filename}")
+        else:
+            print(f"error: file not found")
+    except Exception as e:
+        print(f"error deleting: {filename}: {e}")
+
 #===============
 # 個別処理関数
 #===============
@@ -713,6 +724,10 @@ async def export_vote_csv(interaction, result, msg_id, dt, mode):
         content="投票集計結果のCSVだよ🫡",
         files=[discord.File(grouped_file), discord.File(listed_file)]
     )
+    
+    # 一時ファイルを削除
+    remove_tmp_file(grouped_file)
+    remove_tmp_file(listed_file)
 
 #---------------
 # OCR関係
@@ -1000,7 +1015,7 @@ def write_vc_log(guild_id, channel_id, start_time):
         sessions.sort(key=lambda x: x["time"])
         
         # CSVファイル作成
-        filename = f"./data/vc_log_{channel_id}_{start_time.strftime('%Y%m%d_%H%M%S')}.csv"
+        filename = f"./tmp/vc_log_{channel_id}_{start_time.strftime('%Y%m%d_%H%M%S')}.csv"
         meta = {
             "title": "vc_log",
             "speeched_at": start_time.strftime("%Y/%m/%d %H:%M")
@@ -1011,7 +1026,7 @@ def write_vc_log(guild_id, channel_id, start_time):
             for item in sessions
         ]
         make_csv(filename, rows, meta, header)
-        print(f"VCログを保存: {filename}")
+        print(f"saved vc log: {filename}")
         
         return filename
 
@@ -1099,6 +1114,9 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
     # discordに送信
     await status_msg.edit(content="", embed=embed)
     await channel.send(content="VCのログを作成したよ🫡", file=discord.File(filename))
+
+    # 一時ファイルを削除
+    remove_tmp_file(filename)
     
     # 録音セッション辞書からチャンネルIDを削除
     remove_rec_session(guild_id, channel.id, channel.name)
@@ -1721,6 +1739,9 @@ async def export_members(ctx: discord.ApplicationContext):
         file=discord.File(filename)
     )
 
+    # 一時ファイルの削除
+    remove_tmp_file(filename)
+
 #---------------
 # OCR関係
 #---------------
@@ -1770,6 +1791,9 @@ async def table_ocr(
         file=discord.File(filename)
     )
 
+    # 一時ファイルの削除
+    remove_tmp_file(filename)
+
 #=====context_ocr コマンド=====
 @bot.message_command(name="context_ocr")
 async def context_ocr(ctx: discord.ApplicationContext, message: discord.Message):
@@ -1803,6 +1827,9 @@ async def context_ocr(ctx: discord.ApplicationContext, message: discord.Message)
         content="OCR結果のCSVだよ🫡",
         file=discord.File(filename)
     )
+
+    # 一時ファイルの削除
+    remove_tmp_file(filename)
 
 #---------------
 # リスト化関係
