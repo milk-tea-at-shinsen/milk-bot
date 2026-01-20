@@ -84,9 +84,9 @@ JST = timezone(timedelta(hours=9), "JST")
 def load_data(data):
     try:
         # jsonが存在すれば
-        if os.path.exists(f"/mnt/data/{data}.json"):
+        if os.path.exists(f"./data/{data}.json"):
             # fileオブジェクト変数に格納
-            with open(f"/mnt/data/{data}.json", "r", encoding = "utf-8") as file:
+            with open(f"./data/{data}.json", "r", encoding = "utf-8") as file:
                 print(f"loaded dict: {datetime.now(JST)} - {data}")
                 return json.load(file)
         else:
@@ -205,9 +205,9 @@ def clean_slash_options(func):
 def export_data(data: dict, name: str):
     try:
         # 指定ディレクトリがなければ作成する
-        os.makedirs(f"/mnt/data", exist_ok=True)
+        os.makedirs(f"./data", exist_ok=True)
         #jsonファイルを開く（存在しなければ作成する）
-        with open(f"/mnt/data/{name}.json", "w", encoding = "utf-8") as file:
+        with open(f"./data/{name}.json", "w", encoding = "utf-8") as file:
             # jsonファイルを保存
             json.dump(data, file, ensure_ascii=False, indent=2)
         print(f"saved dict: {datetime.now(JST)} - {name}")
@@ -709,12 +709,12 @@ async def export_vote_csv(interaction, result, msg_id, dt, mode):
     
     # csv(グループ型)の作成
     header, rows = make_grouped_rows(result)
-    grouped_file = f"/tmp/{dt.strftime('%Y%m%d_%H%M')}_grouped.csv"
+    grouped_file = f"./tmp/{dt.strftime('%Y%m%d_%H%M')}_grouped.csv"
     make_csv(grouped_file, rows, meta, header)
     
     # csv(リスト型)の作成
     header, rows = make_listed_rows(result)
-    listed_file = f"/tmp/{dt.strftime('%Y%m%d_%H%M')}_listed.csv"
+    listed_file = f"./tmp/{dt.strftime('%Y%m%d_%H%M')}_listed.csv"
     make_csv(listed_file, rows, meta, header)
     
     # discordに送信
@@ -1009,7 +1009,7 @@ def write_vc_log(guild_id, channel_id, start_time):
         sessions.sort(key=lambda x: x["time"])
         
         # CSVファイル作成
-        filename = f"/mnt/data/vc_log_{channel_id}_{start_time.strftime('%Y%m%d_%H%M%S')}.csv"
+        filename = f"./data/vc_log_{channel_id}_{start_time.strftime('%Y%m%d_%H%M%S')}.csv"
         meta = {
             "title": "vc_log",
             "speeched_at": start_time.strftime("%Y/%m/%d %H:%M")
@@ -1032,7 +1032,9 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
     status_msg = await channel.send(f"{bot.user.display_name}が考え中…🤔")
     await asyncio.sleep(2)
 
+    # 録音データを発言者ごとに分解して処理
     for user_id, audio in sink.audio_data.items():
+        # 表示名の取得
         user = channel.guild.get_member(user_id) or await channel.guild.fetch_member(user_id)
         user_name = user.nick or user.display_name or user.name
 
@@ -1041,11 +1043,12 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
             print(f"skipping bot audio: {user_name}")
             continue
         
-        # 開始時間の取得
+        # 発言開始までの経過時間の取得
         rel_start_time = getattr(audio, "first_packet", 0)
         if rel_start_time == 0:
             rel_start_time = getattr(audio, "timestamp", 0)
         
+        # 録音開始時刻に発言開始までの経過時間を加えて、発言開始時刻を計算
         user_start_time = start_time + timedelta(seconds=rel_start_time)
 
         try:
@@ -1075,14 +1078,13 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
             
             print(f"res: {res}")
             
+            # 解析後のデータにそれぞれの発言時刻を付与
             if res and "results" in res:
                 for result in res["results"]:
+                    # 発言開始時刻に発言開始からの経過時間を加算して、それぞれの時刻を計算
                     rel_start = result["alternatives"][0]["timestamps"][0][1]
                     actual_start = user_start_time + timedelta(seconds=rel_start)
                     transcript = result["alternatives"][0]["transcript"]
-                    
-                    print(f"DEBUG: rel_start={rel_start} (type: {type(rel_start)})", flush=True)
-                    print(f"DEBUG: actual_start={actual_start}", flush=True)
                     
                     rec_sessions[channel.id].append({
                         "time": actual_start,
@@ -1482,7 +1484,7 @@ async def move_dict(ctx):
 #=====dict_export コマンド=====
 @bot.command()
 async def dict_export(ctx):
-    filename = "/mnt/data/all_data.json"
+    filename = "./data/all_data.json"
     await ctx.message.delete()
     await ctx.send("統合辞書のjsonファイルだよ🫡", file=discord.File(filename))
 
@@ -1712,7 +1714,7 @@ async def export_members(ctx: discord.ApplicationContext):
     await ctx.interaction.response.defer()
     guild = ctx.interaction.guild
     
-    filename = f"/tmp/members_list_{datetime.now(JST).strftime('%Y%m%d_%H%M')}.csv"
+    filename = f"./tmp/members_list_{datetime.now(JST).strftime('%Y%m%d_%H%M')}.csv"
     meta = {
         "# members_at": guild.name,
         "# collected_at": datetime.now(JST).strftime("%Y/%m/%d %H:%M")
@@ -1768,7 +1770,7 @@ async def table_ocr(
     rows = remove_duplicate_rows(temp_rows)
     
     # csv作成処理
-    filename = f"/tmp/ocr_{datetime.now(JST).strftime('%Y%m%d_%H%M')}.csv"
+    filename = f"./tmp/ocr_{datetime.now(JST).strftime('%Y%m%d_%H%M')}.csv"
     make_csv(filename, rows)
     
     # CSVを出力
@@ -1802,7 +1804,7 @@ async def context_ocr(ctx: discord.ApplicationContext, message: discord.Message)
     print(f"rows:{rows}")
     
     # csv作成処理
-    filename = f"/tmp/ocr_{datetime.now(JST).strftime('%Y%m%d_%H%M')}.csv"
+    filename = f"./tmp/ocr_{datetime.now(JST).strftime('%Y%m%d_%H%M')}.csv"
     make_csv(filename, rows)
     
     # CSVを出力
@@ -1886,7 +1888,7 @@ async def recstart(ctx):
     vc.start_recording(
         discord.sinks.WaveSink(),
         after_recording,
-        channel,
+        ctx.channel,
         start_time
     )
 
