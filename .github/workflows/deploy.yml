@@ -20,33 +20,35 @@ jobs:
           username: root
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            # ブランチに応じた設定の切り替え
+            # 絶対パスで指定する
             if [ "${{ github.ref_name }}" = "main" ]; then
-              TARGET_DIR="~/mybot"
+              TARGET_DIR="/root/mybot"
               SERVICE_NAME="mybot.service"
             else
-              TARGET_DIR="~/devbot"
+              TARGET_DIR="/root/devbot"
               SERVICE_NAME="devbot.service"
             fi
 
             echo "Deploying to $TARGET_DIR via $SERVICE_NAME..."
 
-            cd $TARGET_DIR
-            
+            # フォルダ移動に失敗したらエラーで終了させる（重要！）
+            cd $TARGET_DIR || { echo "Error: Directory $TARGET_DIR not found"; exit 1; }
+
             # 1. 確実に最新情報を取得
             git fetch origin ${{ github.ref_name }}
             
-            # 2. 強制リセット（手動修正やコンフリクトを無視してGitHubに合わせる）
+            # 2. 強制リセット
             git reset --hard origin/${{ github.ref_name }}
 
             # 3. 仮想環境のライブラリ更新
             if [ -f "requirements.txt" ]; then
-              ./venv/bin/pip install -r requirements.txt
+              # venvへのパスも念のためフルパスで指定
+              $TARGET_DIR/venv/bin/pip install -r requirements.txt
             fi
 
             # 4. systemdの再読み込みと再起動
             sudo systemctl daemon-reload
             sudo systemctl restart $SERVICE_NAME
             
-            # 5. 状態確認（簡易チェック）
-            systemctl is-active --quiet $SERVICE_NAME && echo "Service is running!" || echo "Service failed to start."
+            # 5. 状態確認
+            systemctl is-active --quiet $SERVICE_NAME && echo "Service is running!" || { echo "Service failed to start"; exit 1; }
