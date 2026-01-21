@@ -475,7 +475,7 @@ async def collect_message(channel, counts=None, minutes=None):
         if  any(condition):
             end_flag = True
         else:
-            loop_start_msg = msgs[0].id
+            loop_start_msg = msgs[0]
         # リストに追加
         if not end_flag:
             messages.extend(msgs)
