@@ -429,6 +429,76 @@ def make_csv(filename, rows, meta=None, header=None):
         # rowsの書込
         writer.writerows(rows)
 
+#=====範囲を指定してメッセージidのリストを作成=====
+async def collect_message(channel, counts=None, minutes=None):
+    # チャンネルの最新メッセージを取得
+    start_msg = await channel.fetch_message(channel.last_message_id)
+    # チャンネルの一番古いメッセージを取得
+    limit_msg = [msg async for msg in channel.history(limit=1, oldest_first=True)][0]
+    
+    # 終了フラグをFalseに設定
+    end_flag = False
+    # 返信先メッセージをリストに格納
+    messages = []
+    # 返信先メッセージをhistoryの最初の位置に設定
+    loop_start_msg = start_msg
+    # 件数指定が1未満の場合は1を設定
+    if counts is not None and counts < 1:
+        counts = 1
+    # 件数指定があればその件数を設定
+    elif counts is not None:
+        counts = int(counts)
+    # 件数指定がない場合は一旦None
+    else:
+        counts = None
+        # 件数指定も時間指定もない場合は10分を設定
+        if minutes is None:
+            minutes = 10
+    if minutes:
+        # 時間指定がある場合、取得するメッセージの範囲を計算
+        start_time = start_msg.created_at
+        end_time = start_time - timedelta(minutes=int(minutes))
+
+    loop_count = 0
+    # 終了フラグが立つまでループ
+    while end_flag is False:
+        # historyの最初の位置より古い100件分のメッセージを取得
+        msgs = [msg async for msg in channel.history(before=loop_start_msg, limit=100)]
+
+        condition = [
+            len(msgs) < 100,
+            (counts is not None) and ((len(messages) + len(msgs)) >= counts),
+            msgs[0].id == limit_msg.id,
+            (minutes is not None) and (msgs[0].created_at < end_time)
+        ]
+        # 取得数が100件未満または累計が指定数以上または100件目が最終または100件目が時間指定を超過しているなら終了
+        if  any(condition):
+            end_flag = True
+        else:
+            loop_start_msg = msgs[0]
+        # リストに追加
+        if not end_flag:
+            messages.extend(msgs)
+        elif counts is not None:
+            messages.extend(msgs[:counts - len(messages)])
+        else:
+            messages.extend(msgs)
+
+        loop_count += 1
+        if loop_count & 1000 == 0:
+            await asyncio.sleep(0.25)
+
+    # リストを古い順にソート
+    messages.sort(key=lambda m: m.created_at)
+
+    if minutes:
+        # メッセージのタイムスタンプが範囲内ならリストに追加
+        msg_ids = [message.id for message in messages if start_time >= message.created_at >= end_time]
+    else:
+        msg_ids = [message.id for message in messages]
+
+    return msg_ids
+
 #=====一時ファイルの削除=====
 def remove_tmp_file(filename: str):
     try:
@@ -458,7 +528,7 @@ async def handle_remove_reminder(interaction, dt, idx):
             ephemeral=True
         )
 
-#=====通知用ループ処理===== *require modifying
+#=====通知用ループ処理=====
 async def reminder_loop():
     await bot.wait_until_ready()
     while not bot.is_closed():
@@ -732,47 +802,6 @@ async def export_vote_csv(interaction, result, msg_id, dt, mode):
 #---------------
 # OCR関係
 #---------------
-#=====メッセージリストの作成=====
-async def collect_message(channel, counts, minutes, start_msg, limit_msg):
-    # 終了フラグをFalseに設定
-    end_flag = False
-    # 返信先メッセージをリストに格納
-    messages = []
-    # 返信先メッセージをhistoryの最初の位置に設定
-    loop_start_msg = start_msg
-    # 件数指定なしまたは1未満の場合は1を設定
-    if counts is not None:
-        counts = int(counts)
-    if counts is None or counts < 1:
-        counts = 1
-
-    # 終了フラグが立つまでループ
-    while end_flag is False:
-        # historyの最初の位置より古い100件分のメッセージを取得
-        msgs = [msg async for msg in channel.history(before=loop_start_msg, limit=100)]
-
-        # 取得数が100件未満または累計が指定数以上または100件目が最終なら終了
-        if len(msgs) < 100 or (len(messages) + len(msgs)) >= counts or msgs[0].id == limit_msg.id:
-            end_flag = True
-        else:
-            loop_start_msg = msgs[0].id
-        # リストに追加
-        messages.extend(msgs if not end_flag else msgs[:counts - len(messages)])
-
-    # リストを古い順にソート
-    messages.sort(key=lambda m: m.created_at)
-
-    if minutes:
-        # 時間指定がある場合、取得するメッセージの範囲を計算
-        start_time = start_msg.created_at
-        end_time = start_time + timedelta(minutes=int(minutes))
-        # メッセージのタイムスタンプが範囲内ならリストに追加
-        msg_ids = [message.id for message in messages if start_time <= message.created_at <= end_time]
-    else:
-        msg_ids = [message.id for message in messages]
-
-    return msg_ids
-            
 #=====添付画像バイナリ取得処理=====
 async def get_image(channel, msg_id):
     print("[start: get_image]")
@@ -955,7 +984,7 @@ async def handle_make_list(message):
     await message.delete()
 
 #---------------
-# STT関係
+# 会議ログ作成関係
 #---------------
 #=====要約用テキスト作成=====
 def make_gemini_text(guild_id, channel_id):
@@ -1005,7 +1034,7 @@ def make_summery(text):
     return response.text
 
 #=====vcログ作成=====
-def write_vc_log(guild_id, channel_id, start_time):
+def write_vc_log(guild_id, channel_id, start_time=None):
     print("[start: write_vc_log]")
     rec_sessions = all_data[guild_id]["rec_sessions"]
 
@@ -1013,6 +1042,8 @@ def write_vc_log(guild_id, channel_id, start_time):
         sessions = rec_sessions[channel_id]
         # セッションを時間順にソート
         sessions.sort(key=lambda x: x["time"])
+        if start_time is None:
+            start_time = sessions[0]["time"]
         
         # CSVファイル作成
         filename = f"./tmp/vc_log_{channel_id}_{start_time.strftime('%Y%m%d_%H%M%S')}.csv"
@@ -1035,6 +1066,7 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
     print("[start: after_recording]")
     guild_id = channel.guild.id
     rec_sessions = all_data[guild_id]["rec_sessions"]
+    await channel.send(f"⏹会議の記録を停止したよ🫡")
     status_msg = await channel.send(f"{bot.user.display_name}が考え中…🤔")
     await asyncio.sleep(2)
 
@@ -1750,20 +1782,13 @@ async def export_members(ctx: discord.ApplicationContext):
 @clean_slash_options
 async def table_ocr(
     ctx: discord.ApplicationContext,
-    counts: discord.Option(str, description="時間指定(分)", required=False),
-    minutes: discord.Option(str, description="件数指定(件)", required=False)
+    counts: discord.Option(str, description="指定時間(分)", required=False),
+    minutes: discord.Option(str, description="指定件数(件)", required=False)
 ):
     await ctx.interaction.response.defer()
 
-    # チャンネルの最新メッセージを取得
-    start_msg_id = ctx.interaction.channel.last_message_id
-    start_msg = await ctx.interaction.channel.fetch_message(start_msg_id)
-    # チャンネルの一番古いメッセージを取得
-    msgs = [msg async for msg in ctx.interaction.channel.history(limit=1, oldest_first=True)]
-    limit_msg = msgs[0]
-
     # 指定した範囲のメッセージを取得
-    msg_ids = await collect_message(ctx.interaction.channel, counts, minutes, start_msg, limit_msg)
+    msg_ids = await collect_message(ctx.interaction.channel, counts, minutes)
 
     # メッセージから画像データを取得してリストに格納
     all_contents = []
@@ -1877,7 +1902,7 @@ async def remove_from_list(ctx: discord.ApplicationContext, message: discord.Mes
         await ctx.interaction.response.send_message(content=f"️⚠️リストの項目以外は削除できないよ", ephemeral=True)
 
 #---------------
-# STT関係
+# 会議ログ作成関係
 #---------------
 #=====recstart コマンド=====
 @bot.command(name="recstart")
@@ -1914,7 +1939,7 @@ async def recstart(ctx):
     # 録音セッション辞書にコマンド実行チャンネルのIDを追加
     add_rec_session(ctx.guild.id, ctx.channel.id)
 
-    await ctx.send("⏺録音を開始したよ🫡")
+    await ctx.send("⏺会議の記録を開始したよ🫡")
 
 #=====recstop コマンド=====
 @bot.command(name="recstop")
@@ -1929,6 +1954,52 @@ async def recstop(ctx):
         else:
             await ctx.message.delete()
             await ctx.send("⚠️いまは録音してないよ")
+
+#=====/text_log コマンド=====
+@bot.slash_command(name="text_log", description="指定時間前から現在までのメッセージのログと要約を作成するよ")
+@clean_slash_options
+async def text_log(
+    ctx: discord.ApplicationContext,
+    minutes: discord.Option(str, description="指定時間(分)", default=None)
+):
+    rec_sessions = all_data[guild_id]["rec_sessions"]
+    status_msg = await ctx.respond(content=f"{bot.user.display_name}が考え中…🤔")
+
+    # 指定範囲内のメッセージidを取得
+    channel = ctx.channel
+    msg_ids = await collect_message(channel=channel, minutes=minutes, counts=None)
+
+    # メッセージをログに記録
+    add_rec_session(ctx.guild.id, channel.id)
+    for msg_id in msg_ids:
+        message = await channel.fetch_message(msg_id)
+        rec_sessions[message.channel.id].append({
+            "time": message.created_at,
+            "name": message.author.nick or message.author.display_name or message.author.name,
+            "text": message.content.strip()
+        })
+
+    # ログをcsv化して保存
+    filename = write_vc_log(guild_id, channel.id)
+    text = make_gemini_text(guild_id, channel.id)
+    summerized_text = make_summery(text)
+    print(f"summerized_text: {summerized_text}")
+
+    # embed作成
+    embed = discord.Embed(
+        title="チャット会議摘録",
+        description=summerized_text,
+        color=discord.Color.purple()
+    )
+    # discordに送信
+    await status_msg.edit(content="", embed=embed)
+    await channel.send(content="チャット会議のログを作成したよ🫡", file=discord.File(filename))
+
+    # 一時ファイルを削除
+    remove_tmp_file(filename)
+    
+    # 録音セッション辞書からチャンネルIDを削除
+    remove_rec_session(guild_id, channel.id, channel.name)
 
 # Botを起動
 bot.run(os.getenv("DISCORD_TOKEN"))
