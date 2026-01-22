@@ -1965,6 +1965,9 @@ async def text_log(
     rec_sessions = all_data[guild_id]["rec_sessions"]
     status_msg = await ctx.respond(content=f"{bot.user.display_name}が考え中…🤔")
 
+    # minutesの指定がなければ30分に設定
+    if minutes is None:
+        minutes = 30
     # 指定範囲内のメッセージidを取得
     channel = ctx.channel
     msg_ids = await collect_message(channel=channel, minutes=minutes, counts=None)
