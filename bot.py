@@ -1014,10 +1014,10 @@ def write_vc_log(guild_id, channel_id, start_time=None):
             start_time = sessions[0]["time"]
         
         # CSVファイル作成
-        filename = f"./tmp/vc_log_{channel_id}_{start_time.strftime('%Y%m%d_%H%M%S')}.csv"
+        filename = f"./tmp/vc_log_{channel_id}_{start_time.astimezone(JST).strftime('%Y%m%d_%H%M%S')}.csv"
         meta = {
             "title": "vc_log",
-            "speeched_at": start_time.strftime("%Y/%m/%d %H:%M")
+            "speeched_at": start_time.astimezone(JST).strftime("%Y/%m/%d %H:%M")
         }
         header = ["time", "name", "text"]
         rows = [
