@@ -1971,6 +1971,7 @@ async def text_log(
     # 指定範囲内のメッセージidを取得
     channel = ctx.channel
     msg_ids = await collect_message(channel=channel, minutes=minutes, counts=None)
+    print(f"msg_ids: {msg_ids}")
 
     # メッセージをログに記録
     add_rec_session(ctx.guild.id, channel.id)
