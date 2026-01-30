@@ -459,7 +459,7 @@ async def collect_message(channel, counts=None, minutes=None):
         # start_time = datetime.now(JST)
         end_time = datetime.now(JST) - timedelta(minutes=int(minutes))
 
-    msgs = [msg async for msg in channel.history(after=end_time, limit=counts, oldest_first=False)]
+    messages = [msg async for msg in channel.history(after=end_time, limit=counts, oldest_first=False)]
 
     # loop_count = 0
     # # 終了フラグが立つまでループ
@@ -498,7 +498,7 @@ async def collect_message(channel, counts=None, minutes=None):
     #     msg_ids = [message.id for message in messages if start_time >= message.created_at >= end_time]
     # else:
     #     msg_ids = [message.id for message in messages]
-    
+
     msg_ids = [message.id for message in messages]
     return msg_ids
 
