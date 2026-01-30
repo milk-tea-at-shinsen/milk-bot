@@ -520,8 +520,8 @@ def remove_tmp_file(filename: str):
 # リマインダー関係
 #---------------
 #=====リマインダー削除=====
-async def handle_remove_reminder(interaction, dt, idx):
-        removed = remove_reminder(dt, idx)
+async def handle_remove_reminder(interaction, guild_id, dt, idx):
+        removed = remove_reminder(guild_id, dt, idx)
 
         # 削除完了メッセージの送信
         await interaction.message.delete()
@@ -1165,8 +1165,10 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
 #=====リマインダー選択=====
 class ReminderSelect(View):
     # クラスの初期設定
-    def __init__(self, reminders):
+    def __init__(self, guild_id, reminders):
         super().__init__()
+        # guild_idプロパティにサーバーidをセット
+        self.guild_id = guild_id
         # remindersプロパティにリマインダー辞書をセット
         self.reminders = reminders
         
@@ -1203,7 +1205,7 @@ class ReminderSelect(View):
         idx = int(idx_str)
 
         # 予定の削除
-        await handle_remove_reminder(interaction, dt, idx)
+        await handle_remove_reminder(interaction, guild_id, dt, idx)
 
 #---------------
 # 投票関係
@@ -1613,7 +1615,7 @@ async def reminder_delete(ctx: discord.ApplicationContext):
     reminders = all_data[ctx.guild.id]["reminders"]
     # リマインダーが設定されている場合、選択メニューを表示
     if reminders:
-        view = ReminderSelect(reminders)
+        view = ReminderSelect(ctx.guild.id, reminders)
         await ctx.interaction.response.send_message("削除するリマインダーを選んでね", view=view)
     # リマインダーが設定されていない場合のメッセージ
     else:
