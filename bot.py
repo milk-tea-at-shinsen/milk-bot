@@ -498,7 +498,8 @@ async def collect_message(channel, counts=None, minutes=None):
     #     msg_ids = [message.id for message in messages if start_time >= message.created_at >= end_time]
     # else:
     #     msg_ids = [message.id for message in messages]
-
+    
+    msg_ids = [message.id for message in messages]
     return msg_ids
 
 #=====一時ファイルの削除=====
