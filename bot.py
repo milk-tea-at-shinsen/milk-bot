@@ -456,48 +456,13 @@ async def collect_message(channel, counts=None, minutes=None):
             minutes = 10
     if minutes:
         # 時間指定がある場合、取得するメッセージの範囲を計算
-        # start_time = datetime.now(JST)
         end_time = datetime.now(JST) - timedelta(minutes=int(minutes))
 
     messages = [msg async for msg in channel.history(after=end_time, limit=counts, oldest_first=False)]
-
-    # loop_count = 0
-    # # 終了フラグが立つまでループ
-    # while end_flag is False:
-    #     # historyの最初の位置より古い100件分のメッセージを取得
-    #     msgs = [msg async for msg in channel.history(before=loop_start_msg, limit=100)]
-
-    #     condition = [
-    #         len(msgs) < 100,
-    #         (counts is not None) and ((len(messages) + len(msgs)) >= counts),
-    #         msgs[0].id == limit_msg.id,
-    #         (minutes is not None) and (msgs[0].created_at < end_time)
-    #     ]
-    #     # 取得数が100件未満または累計が指定数以上または100件目が最終または100件目が時間指定を超過しているなら終了
-    #     if  any(condition):
-    #         end_flag = True
-    #     else:
-    #         loop_start_msg = msgs[0]
-    #     # リストに追加
-    #     if not end_flag:
-    #         messages.extend(msgs)
-    #     elif counts is not None:
-    #         messages.extend(msgs[:counts - len(messages)])
-    #     else:
-    #         messages.extend(msgs)
-
-    #     loop_count += 1
-    #     if loop_count & 1000 == 0:
-    #         await asyncio.sleep(0.25)
+    del messages[0]
 
     # リストを古い順にソート
     messages.sort(key=lambda m: m.created_at)
-
-    # if minutes:
-    #     # メッセージのタイムスタンプが範囲内ならリストに追加
-    #     msg_ids = [message.id for message in messages if start_time >= message.created_at >= end_time]
-    # else:
-    #     msg_ids = [message.id for message in messages]
 
     msg_ids = [message.id for message in messages]
     return msg_ids
@@ -1056,7 +1021,7 @@ def write_vc_log(guild_id, channel_id, start_time=None):
         }
         header = ["time", "name", "text"]
         rows = [
-            [item["time"].strftime("%Y/%m/%d %H:%M:%S"), item["name"], item["text"]]
+            [item["time"].astimezone(JST).strftime("%Y/%m/%d %H:%M:%S"), item["name"], item["text"]]
             for item in sessions
         ]
         make_csv(filename, rows, meta, header)
@@ -1790,7 +1755,7 @@ async def table_ocr(
     counts: discord.Option(str, description="指定時間(分)", required=False),
     minutes: discord.Option(str, description="指定件数(件)", required=False)
 ):
-    await ctx.interaction.response.defer()
+    status_msg = await ctx.respond(content=f"{bot.user.display_name}が考え中…🤔")
 
     # 指定した範囲のメッセージを取得
     msg_ids = await collect_message(ctx.interaction.channel, counts, minutes)
@@ -1816,7 +1781,7 @@ async def table_ocr(
     make_csv(filename, rows)
     
     # CSVを出力
-    await ctx.interaction.followup.send(
+    await status_msg.edit(
         content="OCR結果のCSVだよ🫡",
         file=discord.File(filename)
     )
@@ -1832,7 +1797,7 @@ async def context_ocr(ctx: discord.ApplicationContext, message: discord.Message)
         await ctx.interaction.response.send_message(content="⚠️画像が添付されてないよ", ephemeral=True)
         return
 
-    await ctx.interaction.response.defer()
+    status_msg = await ctx.respond(content=f"{bot.user.display_name}が考え中…🤔")
 
     # 画像ごとにOCR処理を実行してtemp_rowsに格納
     temp_rows = []
@@ -1853,7 +1818,7 @@ async def context_ocr(ctx: discord.ApplicationContext, message: discord.Message)
     make_csv(filename, rows)
     
     # CSVを出力
-    await ctx.interaction.followup.send(
+    await status_msg.edit(
         content="OCR結果のCSVだよ🫡",
         file=discord.File(filename)
     )
