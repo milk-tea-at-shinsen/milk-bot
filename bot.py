@@ -456,47 +456,15 @@ async def collect_message(channel, counts=None, minutes=None):
             minutes = 10
     if minutes:
         # 時間指定がある場合、取得するメッセージの範囲を計算
-        start_time = start_msg.created_at
-        end_time = start_time - timedelta(minutes=int(minutes))
+        end_time = datetime.now(JST) - timedelta(minutes=int(minutes))
 
-    loop_count = 0
-    # 終了フラグが立つまでループ
-    while end_flag is False:
-        # historyの最初の位置より古い100件分のメッセージを取得
-        msgs = [msg async for msg in channel.history(before=loop_start_msg, limit=100)]
-
-        condition = [
-            len(msgs) < 100,
-            (counts is not None) and ((len(messages) + len(msgs)) >= counts),
-            msgs[0].id == limit_msg.id,
-            (minutes is not None) and (msgs[0].created_at < end_time)
-        ]
-        # 取得数が100件未満または累計が指定数以上または100件目が最終または100件目が時間指定を超過しているなら終了
-        if  any(condition):
-            end_flag = True
-        else:
-            loop_start_msg = msgs[0]
-        # リストに追加
-        if not end_flag:
-            messages.extend(msgs)
-        elif counts is not None:
-            messages.extend(msgs[:counts - len(messages)])
-        else:
-            messages.extend(msgs)
-
-        loop_count += 1
-        if loop_count & 1000 == 0:
-            await asyncio.sleep(0.25)
+    messages = [msg async for msg in channel.history(after=end_time, limit=counts, oldest_first=False)]
+    del messages[0]
 
     # リストを古い順にソート
     messages.sort(key=lambda m: m.created_at)
 
-    if minutes:
-        # メッセージのタイムスタンプが範囲内ならリストに追加
-        msg_ids = [message.id for message in messages if start_time >= message.created_at >= end_time]
-    else:
-        msg_ids = [message.id for message in messages]
-
+    msg_ids = [message.id for message in messages]
     return msg_ids
 
 #=====一時ファイルの削除=====
@@ -517,8 +485,8 @@ def remove_tmp_file(filename: str):
 # リマインダー関係
 #---------------
 #=====リマインダー削除=====
-async def handle_remove_reminder(interaction, dt, idx):
-        removed = remove_reminder(dt, idx)
+async def handle_remove_reminder(interaction, guild_id, dt, idx):
+        removed = remove_reminder(guild_id, dt, idx)
 
         # 削除完了メッセージの送信
         await interaction.message.delete()
@@ -989,7 +957,7 @@ async def handle_make_list(message):
 #=====要約用テキスト作成=====
 def make_gemini_text(guild_id, channel_id):
     rec_sessions = all_data[guild_id]["rec_sessions"]
-    lines = [f"{item['time'].strftime('%Y/%m/%d %H:%M:%S')} {item['name']}: {item['text']}" for item in rec_sessions[channel_id]]
+    lines = [f"{item['time'].astimezone(JST).strftime('%Y/%m/%d %H:%M:%S')} {item['name']}: {item['text']}" for item in rec_sessions[channel_id]]
     text = "\n".join(lines)
     return text
     
@@ -1046,14 +1014,14 @@ def write_vc_log(guild_id, channel_id, start_time=None):
             start_time = sessions[0]["time"]
         
         # CSVファイル作成
-        filename = f"./tmp/vc_log_{channel_id}_{start_time.strftime('%Y%m%d_%H%M%S')}.csv"
+        filename = f"./tmp/vc_log_{channel_id}_{start_time.astimezone(JST).strftime('%Y%m%d_%H%M%S')}.csv"
         meta = {
             "title": "vc_log",
-            "speeched_at": start_time.strftime("%Y/%m/%d %H:%M")
+            "speeched_at": start_time.astimezone(JST).strftime("%Y/%m/%d %H:%M")
         }
         header = ["time", "name", "text"]
         rows = [
-            [item["time"].strftime("%Y/%m/%d %H:%M:%S"), item["name"], item["text"]]
+            [item["time"].astimezone(JST).strftime("%Y/%m/%d %H:%M:%S"), item["name"], item["text"]]
             for item in sessions
         ]
         make_csv(filename, rows, meta, header)
@@ -1162,8 +1130,10 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
 #=====リマインダー選択=====
 class ReminderSelect(View):
     # クラスの初期設定
-    def __init__(self, reminders):
+    def __init__(self, guild_id, reminders):
         super().__init__()
+        # guild_idプロパティにサーバーidをセット
+        self.guild_id = guild_id
         # remindersプロパティにリマインダー辞書をセット
         self.reminders = reminders
         
@@ -1200,7 +1170,7 @@ class ReminderSelect(View):
         idx = int(idx_str)
 
         # 予定の削除
-        await handle_remove_reminder(interaction, dt, idx)
+        await handle_remove_reminder(interaction, guild_id, dt, idx)
 
 #---------------
 # 投票関係
@@ -1610,7 +1580,7 @@ async def reminder_delete(ctx: discord.ApplicationContext):
     reminders = all_data[ctx.guild.id]["reminders"]
     # リマインダーが設定されている場合、選択メニューを表示
     if reminders:
-        view = ReminderSelect(reminders)
+        view = ReminderSelect(ctx.guild.id, reminders)
         await ctx.interaction.response.send_message("削除するリマインダーを選んでね", view=view)
     # リマインダーが設定されていない場合のメッセージ
     else:
@@ -1785,7 +1755,7 @@ async def table_ocr(
     counts: discord.Option(str, description="指定時間(分)", required=False),
     minutes: discord.Option(str, description="指定件数(件)", required=False)
 ):
-    await ctx.interaction.response.defer()
+    status_msg = await ctx.respond(content=f"{bot.user.display_name}が考え中…🤔")
 
     # 指定した範囲のメッセージを取得
     msg_ids = await collect_message(ctx.interaction.channel, counts, minutes)
@@ -1811,7 +1781,7 @@ async def table_ocr(
     make_csv(filename, rows)
     
     # CSVを出力
-    await ctx.interaction.followup.send(
+    await status_msg.edit(
         content="OCR結果のCSVだよ🫡",
         file=discord.File(filename)
     )
@@ -1827,7 +1797,7 @@ async def context_ocr(ctx: discord.ApplicationContext, message: discord.Message)
         await ctx.interaction.response.send_message(content="⚠️画像が添付されてないよ", ephemeral=True)
         return
 
-    await ctx.interaction.response.defer()
+    status_msg = await ctx.respond(content=f"{bot.user.display_name}が考え中…🤔")
 
     # 画像ごとにOCR処理を実行してtemp_rowsに格納
     temp_rows = []
@@ -1848,7 +1818,7 @@ async def context_ocr(ctx: discord.ApplicationContext, message: discord.Message)
     make_csv(filename, rows)
     
     # CSVを出力
-    await ctx.interaction.followup.send(
+    await status_msg.edit(
         content="OCR結果のCSVだよ🫡",
         file=discord.File(filename)
     )
