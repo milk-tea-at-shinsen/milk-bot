@@ -957,7 +957,7 @@ async def handle_make_list(message):
 #=====要約用テキスト作成=====
 def make_gemini_text(guild_id, channel_id):
     rec_sessions = all_data[guild_id]["rec_sessions"]
-    lines = [f"{item['time'].strftime('%Y/%m/%d %H:%M:%S')} {item['name']}: {item['text']}" for item in rec_sessions[channel_id]]
+    lines = [f"{item['time'].astimezone(JST).strftime('%Y/%m/%d %H:%M:%S')} {item['name']}: {item['text']}" for item in rec_sessions[channel_id]]
     text = "\n".join(lines)
     return text
     
