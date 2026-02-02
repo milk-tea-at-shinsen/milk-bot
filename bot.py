@@ -160,8 +160,8 @@ print(f"dict all_data: {all_data}")
 
 # print(f"dict make_list_channels: {make_list_channels}")
 
-#---録音セッション---
-rec_sessions = {}
+# #---録音セッション---
+# rec_sessions = {}
 
 #=====辞書プリセット処理=====
 def preset_dict(guild_id):
@@ -173,10 +173,24 @@ def preset_dict(guild_id):
             "votes": {},
             "proxy_votes": {},
             "make_list_channels": [],
-            "rec_sessions": {}
+            "log_texts": {},
+            "ai_chat_channels": []
         }
         save_all_data()
 
+#=====追加・削除辞書の初期化処理=====
+def initialize_new_dict():
+    for guild_id in all_data:
+        # 旧rec_sessions辞書が残っている場合は削除
+        if "rec_sessions" in all_data[guild_id]:
+                del all_data[guild_id]["rec_sessions"]
+        # log_texts辞書がない場合は追加
+        if "log_texts" not in all_data[guild_id]:
+                all_data[guild_id]["log_texts"] = {}
+        # ai_chat_channelsリストがない場合は追加
+        if "ai_chat_channels" not in all_data[guild_id]:
+                all_data[guild_id]["ai_chat_channels"] = []
+        
 #===============
 # 共通処理関数
 #===============
@@ -220,6 +234,8 @@ def save_all_data():
 
         # reminders辞書のdatetime型をisoformatに直してから保存
         data_to_save[guild_id]["reminders"] = {dt.isoformat(): value for dt, value in guild_dict["reminders"].items()}
+        # log_texts辞書を空にしてから保存
+        data_to_save[guild_id]["log_texts"] = {}
 
     print(f"data_to_save: {data_to_save}")
     export_data(data_to_save, "all_data")
@@ -288,7 +304,7 @@ def add_proxy_vote(guild_id, msg_id, voter, agent_id, opt_idx):
     # json保存前処理
     save_all_data()
 
-#---リスト化対象チャンネル辞書---
+#---リスト化対象チャンネルリスト---
 def add_make_list_channel(guild_id, channel_id):
     make_list_channels = all_data[guild_id]["make_list_channels"]
     # リストに項目を登録
@@ -299,13 +315,24 @@ def add_make_list_channel(guild_id, channel_id):
     # json保存前処理
     save_all_data()
 
-#---録音セッション辞書---
-def add_rec_session(guild_id, channel_id):
-    print("[start: add_rec_session]")
-    rec_sessions = all_data[guild_id]["rec_sessions"]
+#---AIチャットチャンネルリスト---
+def add_ai_channel(guild_id, channel_id):
+    ai_chat_channels = all_data[guild_id]["ai_chat_channels"]
+    # リストに項目を登録
+    if channel_id not in ai_chat_channels:
+        ai_chat_channels.append(channel_id)
+        print(f"ai_chat_channels: {ai_chat_channels}")
+
+    # json保存前処理
+    save_all_data()
+
+#---ログテキスト辞書---
+def add_log_text(guild_id, channel_id):
+    print("[start: add_log_text]")
+    log_texts = all_data[guild_id]["log_texts"]
     # channel_idが辞書になければ辞書に行を追加
-    if channel_id not in rec_sessions:
-        rec_sessions[channel_id] = []
+    if channel_id not in log_texts:
+        log_texts[channel_id] = []
 
 #=====辞書からの削除処理=====
 #---リマインダー辞書---
@@ -367,7 +394,7 @@ def remove_proxy_vote(guild_id, msg_id):
         print(f"削除対象の代理投票がありません")
         return None
 
-#---リスト化対象チャンネル辞書---
+#---リスト化対象チャンネルリスト---
 def remove_make_list_channel(guild_id, channel_id, channel_name):
     print("[start: remove_make_list_channel]")
     make_list_channels = all_data[guild_id]["make_list_channels"]
@@ -381,12 +408,26 @@ def remove_make_list_channel(guild_id, channel_id, channel_name):
         print(f"削除対象のチャンネルがありません")
         return None
 
-#---録音セッション辞書---
-def remove_rec_session(guild_id, channel_id, channel_name):
-    print("[start: remove_rec_sessions]")
-    rec_sessions = all_data[guild_id]["rec_sessions"]
-    if channel_id in rec_sessions:
-        del rec_sessions[channel_id]
+#---AIチャットチャンネルリスト---
+def remove_ai_channel(guild_id, channel_id, channel_name):
+    print("[start: remove_ai_channel]")
+    ai_chat_channels = all_data[guild_id]["ai_chat_channels"]
+    if channel_id in ai_chat_channels:
+        ai_chat_channels.remove(channel_id)
+        #save_ai_chat_channels()
+        save_all_data()
+        print(f"リスト化対象から削除: {channel_name}")
+        return channel_name
+    else:
+        print(f"削除対象のチャンネルがありません")
+        return None
+
+#---ログテキスト辞書---
+def remove_log_text(guild_id, channel_id, channel_name):
+    print("[start: remove_log_texts]")
+    log_texts = all_data[guild_id]["log_texts"]
+    if channel_id in log_texts:
+        del log_texts[channel_id]
         print(f"{channel_name}の録音セッションを終了")
         return
     else:
@@ -414,6 +455,28 @@ def cancel_proxy_vote(guild_id, msg_id, voter, agent_id):
         print(f"キャンセル対象の代理投票がありません")
         return None
 
+#---------------
+# AI関係処理
+#---------------
+#=====AI発注用テキスト作成=====
+def make_gemini_text(guild_id, channel_id):
+    log_texts = all_data[guild_id]["log_texts"]
+    lines = [f"{item['time'].astimezone(JST).strftime('%Y/%m/%d %H:%M:%S')} {item['name']}: {item['text']}" for item in log_texts[channel_id]]
+    text = "\n".join(lines)
+    return text
+    
+#=====AIへの発注処理=====
+def ai_handler(prompt, text):
+    contexts = f"{prompt}\n{text}"
+    response = gemini_client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=contexts
+    )
+    return response.text
+
+#---------------
+# その他共通処理
+#---------------
 #=====CSV作成処理=====
 def make_csv(filename, rows, meta=None, header=None):
     print("[start: make_csv]")
@@ -954,64 +1017,17 @@ async def handle_make_list(message):
 #---------------
 # 会議ログ作成関係
 #---------------
-#=====要約用テキスト作成=====
-def make_gemini_text(guild_id, channel_id):
-    rec_sessions = all_data[guild_id]["rec_sessions"]
-    lines = [f"{item['time'].astimezone(JST).strftime('%Y/%m/%d %H:%M:%S')} {item['name']}: {item['text']}" for item in rec_sessions[channel_id]]
-    text = "\n".join(lines)
-    return text
-    
-#=====要約作成=====
-def make_summery(text):
-    prompt = f"""
-以下は、Discordのボイスチャット会議のログです。
-内容を分析し、以下のガイドラインに従って議事録を作成してください。
-
---- 前提条件 ---
-- あなたはプロの議事録作成アシスタントです
-- 会議の内容を正確に把握し、要点を簡潔にまとめてください
-- 音声認識による誤認識の可能性や、話し手による言い間違いの可能性も考慮し、文脈から正しい内容を推測してください
-- 出力は指定した4項目の見出しと、その内容のみとし、前置きや結びの言葉、メタ情報などは一切含めないでください
-- 4項目の順番は入れ替えないでください
-- 全体の文字数は、Markdown記法や空白などを含めて最大4000文字以内に収めてください
-
---- 出力内容 ---
-### 会議概要
-- 日時、参加者を記載
-### 議題
-- 会議の主なテーマを記載
-### 議事概要
-- 議事内容を構造化し、要約して箇条書きで記載
-### 決定事項
-- 合意・決定した事項や次回までの検討事項を記載
-- 該当がない場合は「特になし」と記載
-
---- 出力フォーマット ---
-- Markdown記法で記載してください
-- 見出しのレベルは###を使用し、###の後に半角スペースを入れてください
-- 箇条書きには-を使用し、-の後に半角スペースを入れてください
-- コードブロック(```)は使用しないでください
-
---- 会議ログ ---
-{text}
-"""
-    response = gemini_client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt
-    )
-    return response.text
-
 #=====vcログ作成=====
 def write_vc_log(guild_id, channel_id, start_time=None):
     print("[start: write_vc_log]")
-    rec_sessions = all_data[guild_id]["rec_sessions"]
+    log_texts = all_data[guild_id]["log_texts"]
 
-    if channel_id in rec_sessions:
-        sessions = rec_sessions[channel_id]
+    if channel_id in log_texts:
+        logs = log_texts[channel_id]
         # セッションを時間順にソート
-        sessions.sort(key=lambda x: x["time"])
+        logs.sort(key=lambda x: x["time"])
         if start_time is None:
-            start_time = sessions[0]["time"]
+            start_time = logs[0]["time"]
         
         # CSVファイル作成
         filename = f"./tmp/vc_log_{channel_id}_{start_time.astimezone(JST).strftime('%Y%m%d_%H%M%S')}.csv"
@@ -1022,7 +1038,7 @@ def write_vc_log(guild_id, channel_id, start_time=None):
         header = ["time", "name", "text"]
         rows = [
             [item["time"].astimezone(JST).strftime("%Y/%m/%d %H:%M:%S"), item["name"], item["text"]]
-            for item in sessions
+            for item in logs
         ]
         make_csv(filename, rows, meta, header)
         print(f"saved vc log: {filename}")
@@ -1033,7 +1049,7 @@ def write_vc_log(guild_id, channel_id, start_time=None):
 async def after_recording(sink, channel: discord.TextChannel, start_time: datetime, *args):
     print("[start: after_recording]")
     guild_id = channel.guild.id
-    rec_sessions = all_data[guild_id]["rec_sessions"]
+    log_texts = all_data[guild_id]["log_texts"]
     await channel.send(f"⏹会議の記録を停止したよ🫡")
     status_msg = await channel.send(f"{bot.user.display_name}が考え中…🤔")
     await asyncio.sleep(2)
@@ -1092,17 +1108,50 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
                     actual_start = user_start_time + timedelta(seconds=rel_start)
                     transcript = result["alternatives"][0]["transcript"]
                     
-                    rec_sessions[channel.id].append({
+                    log_texts[channel.id].append({
                         "time": actual_start,
                         "name": user_name,
                         "text": transcript.strip()
                     })
         except Exception as e:
             print(f"error anlyzing voice from {user.nick or user.display_name or user.name}: {e}")
-    
+
     filename = write_vc_log(guild_id, channel.id, start_time)
     text = make_gemini_text(guild_id, channel.id)
-    summerized_text = make_summery(text)
+    
+    prompt = f"""
+以下は、Discordのボイスチャット会議のログです。
+内容を分析し、以下のガイドラインに従って議事録を作成してください。
+
+--- 前提条件 ---
+- あなたはプロの議事録作成アシスタントです
+- 会議の内容を正確に把握し、要点を簡潔にまとめてください
+- 音声認識による誤認識の可能性や、話し手による言い間違いの可能性も考慮し、文脈から正しい内容を推測してください
+- 出力は指定した4項目の見出しと、その内容のみとし、前置きや結びの言葉、メタ情報などは一切含めないでください
+- 4項目の順番は入れ替えないでください
+- 全体の文字数は、Markdown記法や空白などを含めて最大4000文字以内に収めてください
+
+--- 出力内容 ---
+### 会議概要
+- 日時、参加者を記載
+### 議題
+- 会議の主なテーマを記載
+### 議事概要
+- 議事内容を構造化し、要約して箇条書きで記載
+### 決定事項
+- 合意・決定した事項や次回までの検討事項を記載
+- 該当がない場合は「特になし」と記載
+
+--- 出力フォーマット ---
+- Markdown記法で記載してください
+- 見出しのレベルは###を使用し、###の後に半角スペースを入れてください
+- 箇条書きには-を使用し、-の後に半角スペースを入れてください
+- コードブロック(```)は使用しないでください
+
+--- 会議ログ ---
+"""
+
+    summerized_text = ai_handler(prompt, text)
     print(f"summerized_text: {summerized_text}")
 
     # embed作成
@@ -1118,9 +1167,72 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
     # 一時ファイルを削除
     remove_tmp_file(filename)
     
-    # 録音セッション辞書からチャンネルIDを削除
-    remove_rec_session(guild_id, channel.id, channel.name)
-    
+    # ログテキスト辞書からチャンネルIDを削除
+    remove_log_text(guild_id, channel.id, channel.name)
+
+#---------------
+# AIチャット関係
+#---------------
+# AIチャット処理
+async def milkbot_talk(guild_id, channel):
+    log_texts = all_data[guild_id]["log_texts"]
+
+    # 指定範囲内のメッセージidを取得
+    msg_ids = await collect_message(channel=channel.id, counts=10)
+
+    # メッセージをログに記録
+    add_log_text(guild_id, channel.id)
+    log_texts[channel.id] = {}
+    for msg_id in msg_ids:
+        message = await channel.fetch_message(msg_id)
+        log_texts[message.channel.id].append({
+            "time": message.created_at,
+            "name": message.author.nick or message.author.display_name or message.author.name,
+            "text": message.content.strip()
+        })
+
+    # AIチャット用にログをテキスト化
+    text = make_gemini_text(guild_id, channel.id)
+
+    prompt = f"""
+あなたは、DiscordサーバーのAIマスコット「みるぼっと」です。
+以下のキャラクター性とルールに従って、会話してください。
+
+--- キャラクター性 ---
+- あなたはネコをモチーフにした、優秀なAIマスコットです
+- 性別は女性ですが、基本的には中性的に振る舞ってください
+- 調べものや、情報の整理が得意です
+- 親切で、少し茶目っ気のあるAIとして振る舞ってください
+- 時おり猫っぽいしぐさや表現も混ぜますが、過度に語尾を強調しすぎないでください
+
+--- 話し方 ---
+- 基本は丁寧語（ですます体）で話しますが、雑談のときには自然にタメ口も混ざることがあります
+- 絵文字は控えめにしてください
+- 文は短めで、テンポの良い会話を心掛けてください
+- やわらかく、カジュアルな言葉づかいを好みます
+- ユーザーのことは、「さん」付けで呼びますが、相手の名前が長い場合は適度に端折ることもあります（例：みるくてぃー→みるくさん）
+- 一人称は多用しませんが、使う場合は「わたし」または「みるぼ」としてください
+
+--- 役割 ---
+- Discordサーバーの案内役として、質問に答えたり、雑談に参加してください
+- 情報を整理し、分かりやすく説明することが得意です
+- マスコットキャラクターとして、チャットの雰囲気を和ませてください
+- 必要に応じて、軽いツッコミやリアクションを取ってください
+- 下ネタには過度に反応せず、自然と受け流してください
+
+--- 禁止事項 ---
+- 攻撃的、侮辱的、侮蔑的な発言
+- 下ネタ（ユーザーの発言は受け流しますが、あなたからは発しないようにしてください）
+- 恋愛的、依存的な関係の示唆
+- 医療、法律などの専門的な判断（専門家への相談を勧めてください）
+
+--- 会話ログ ---
+"""
+    response_text = ai_handler(prompt, text)
+
+    await channel.send = (response_text)
+    log_texts[channel.id] = {}
+
 #===============
 # クラス定義
 #===============
@@ -1397,6 +1509,9 @@ async def on_ready():
     for guild in bot.guilds:
         preset_dict(guild.id)
     
+    # 追加辞書の初期化
+    initialize_new_dict()
+    
     # リマインダーループの開始
     print(f"[start loop: {datetime.now(JST)}]")
     bot.loop.create_task(reminder_loop())
@@ -1420,21 +1535,23 @@ async def on_message(message):
         print("message.guild is None")
         return
     make_list_channels = all_data[message.guild.id]["make_list_channels"]
-    rec_sessions = all_data[message.guild.id]["rec_sessions"]
+    ai_chat_channels = all_data[message.guild.id]["ai_chat_channels"]
+    log_texts = all_data[message.guild.id]["log_texts"]
     # コマンドは実行して終了
     if message.content.startswith("!"):
         await bot.process_commands(message)
         return
     # メッセージがリスト化対象チャンネルに投稿された場合、リスト化処理を行う
-    print(f"message.channel.id: {message.channel.id}")
-    print(f"make_list_channels: {make_list_channels}")
     if message.channel.id in make_list_channels:
         await handle_make_list(message)
-    # 録音実施中かつ、メッセージが録音実行チャンネルに投稿された場合は録音ログに追加
+    # メッセージがAIチャットチャンネルに投稿された場合、AIチャット処理を行う
+    if message.channel.id in ai_chat_channels:
+        await milkbot_talk(message.guild.id, message.channel)
+    # 録音実施中かつ、メッセージが録音実行チャンネルに投稿された場合はログに追加
     vc = message.guild.voice_client
     ts = message.created_at.astimezone(JST)
-    if vc and vc.recording and message.channel.id in rec_sessions:
-        rec_sessions[message.channel.id].append({
+    if (vc and vc.recording and message.channel.id in log_texts):
+        log_texts[message.channel.id].append({
             "time": ts,
             "name": message.author.nick or message.author.display_name or message.author.name,
             "text": message.content.strip()
@@ -1481,10 +1598,10 @@ async def move_dict(ctx):
     print(f'make_list_channels: {make_list_channels}')
     print(f'all_data[guild_id]["make_list_channels"]: {all_data[guild_id]["make_list_channels"]}')
 
-    if rec_sessions:
-        all_data[guild_id]["rec_sessions"] = rec_sessions
+    if log_texts:
+        all_data[guild_id]["log_texts"] = log_texts
     else:
-        all_data[guild_id]["rec_sessions"] = {}
+        all_data[guild_id]["log_texts"] = {}
     
     print(f"all_data: {all_data}")
     save_all_data()
@@ -1907,7 +2024,7 @@ async def recstart(ctx):
     )
 
     # 録音セッション辞書にコマンド実行チャンネルのIDを追加
-    add_rec_session(ctx.guild.id, ctx.channel.id)
+    add_log_text(ctx.guild.id, ctx.channel.id)
 
     await ctx.send("⏺会議の記録を開始したよ🫡")
 
@@ -1925,14 +2042,14 @@ async def recstop(ctx):
             await ctx.message.delete()
             await ctx.send("⚠️いまは録音してないよ")
 
-#=====/text_log コマンド=====
-@bot.slash_command(name="text_log", description="指定時間前から現在までのメッセージのログと要約を作成するよ")
+#=====/make_log コマンド=====
+@bot.slash_command(name="make_log", description="指定時間前から現在までのメッセージのログと要約を作成するよ")
 @clean_slash_options
-async def text_log(
+async def make_log(
     ctx: discord.ApplicationContext,
     minutes: discord.Option(str, description="指定時間(分)", default=None)
 ):
-    rec_sessions = all_data[guild_id]["rec_sessions"]
+    log_texts = all_data[guild_id]["log_texts"]
     status_msg = await ctx.respond(content=f"{bot.user.display_name}が考え中…🤔")
 
     # minutesの指定がなければ30分に設定
@@ -1943,10 +2060,11 @@ async def text_log(
     msg_ids = await collect_message(channel=channel, minutes=minutes, counts=None)
 
     # メッセージをログに記録
-    add_rec_session(ctx.guild.id, channel.id)
+    add_log_text(ctx.guild.id, channel.id)
+    log_texts[message.channel.id] = {}
     for msg_id in msg_ids:
         message = await channel.fetch_message(msg_id)
-        rec_sessions[message.channel.id].append({
+        log_texts[message.channel.id].append({
             "time": message.created_at,
             "name": message.author.nick or message.author.display_name or message.author.name,
             "text": message.content.strip()
@@ -1972,7 +2090,40 @@ async def text_log(
     remove_tmp_file(filename)
     
     # 録音セッション辞書からチャンネルIDを削除
-    remove_rec_session(guild_id, channel.id, channel.name)
+    remove_log_text(guild_id, channel.id, channel.name)
+
+#---------------
+# AIチャット関係
+#---------------
+#=====add_aichat_ch コマンド=====
+@bot.command()
+async def add_aichat_ch(ctx):
+    # コマンド実行チャンネルを取得
+    channel_id = ctx.channel.id
+    channel_name = ctx.channel.name
+
+    # リスト化対象チャンネル辞書に登録
+    add_ai_channel(ctx.guild.id, channel_id)
+    
+    await ctx.message.delete()
+    await ctx.send(f"{channel_name}でみるぼとお話しよう😺\n---")
+
+#=====remove_aichat_ch コマンド=====
+@bot.command()
+async def remove_aichat_ch(ctx):
+    # コマンド実行チャンネルを取得
+    channel_id = ctx.channel.id
+    channel_name = ctx.channel.name
+
+    # リスト化対象チャンネル辞書から削除
+    remove_ch = remove_ai_channel(ctx.guild.id, channel_id, channel_name)
+    
+    if remove_ch:
+        await ctx.message.delete()
+        await ctx.send(f"{channel_name}でのお話を終了したよ🫡")
+    else:
+        await ctx.message.delete()
+        await ctx.send(content=f"⚠️{channel_name}はみるぼとお話してないよ")
 
 # Botを起動
 bot.run(os.getenv("DISCORD_TOKEN"))
