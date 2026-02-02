@@ -1219,7 +1219,7 @@ class VoteSelect(View):
         # 代理投票
         if self.mode == VoteSelectMode.PROXY_VOTE:
             await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
-            view = VoteOptionSelect(msg_id, self.voter, self.agent_id)
+            view = VoteOptionSelect(self.guild_id, msg_id, self.voter, self.agent_id)
             await interaction.message.edit(content="代理投票する選択肢を選んでね", view=view)
         # 代理投票キャンセル
         elif self.mode == VoteSelectMode.CANCEL_PROXY_VOTE:
