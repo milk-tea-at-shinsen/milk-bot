@@ -2106,7 +2106,7 @@ async def add_aichat_ch(ctx):
     add_ai_channel(ctx.guild.id, channel_id)
     
     await ctx.message.delete()
-    await ctx.send(f"{channel_name}でみるぼとお話しよう😺\n---")
+    await ctx.send(f"{channel_name}でみるぼとお話しよう😺")
 
 #=====remove_aichat_ch コマンド=====
 @bot.command()
