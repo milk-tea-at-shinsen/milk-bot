@@ -14,6 +14,7 @@ import csv, io
 from google.cloud import vision
 from google.oauth2 import service_account
 from google import genai
+from google.genai import types
 import aiohttp
 import requests
 from functools import wraps
