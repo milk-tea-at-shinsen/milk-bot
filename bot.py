@@ -1549,7 +1549,7 @@ async def on_message(message):
         await handle_make_list(message)
     # メッセージがAIチャットチャンネルに投稿された場合、AIチャット処理を行う
     if message.channel.id in ai_chat_channels:
-        wait_msg = await channel.send(f"{bot.name}が考え中…🤔")
+        wait_msg = await message.channel.send(f"{bot.user.display_name}が考え中…🤔")
         await milkbot_talk(message.guild.id, message.channel, wait_msg)
     # 録音実施中かつ、メッセージが録音実行チャンネルに投稿された場合はログに追加
     vc = message.guild.voice_client
