@@ -36,21 +36,6 @@ intents.guilds = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 print(f"Pycord version: {discord.__version__}")
 
-if not discord.opus.is_loaded():
-    print("[start: opus force load]")
-    try:
-        # Nixpacksが設定するライブラリパスの中からlibopusを探す
-        lib_path = ctypes.util.find_library('opus')
-        if lib_path:
-            discord.opus.load_opus(lib_path)
-            print("[opus force load from lib path]")
-        else:
-            # 見つからない場合の「決め打ち」パス（Nixpacksの標準的な配置）
-            discord.opus.load_opus('/usr/lib/libopus.so.0')
-            print("[opus force load from full path]")
-    except Exception as e:
-        print(f"Opus loading error: {e}")
-
 #=====サービスアカウントキーの読込=====
 #---Vision API---
 key_path = os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"]
@@ -190,6 +175,7 @@ def initialize_new_dict():
         # ai_chat_channelsリストがない場合は追加
         if "ai_chat_channels" not in all_data[guild_id]:
                 all_data[guild_id]["ai_chat_channels"] = []
+        print(f"all_data: {all_data}")
         
 #===============
 # 共通処理関数
@@ -492,43 +478,47 @@ def make_csv(filename, rows, meta=None, header=None):
         # rowsの書込
         writer.writerows(rows)
 
-#=====範囲を指定してメッセージidのリストを作成=====
+#=====範囲を指定してメッセージのリストを作成=====
 async def collect_message(channel, counts=None, minutes=None):
-    # チャンネルの最新メッセージを取得
-    start_msg = await channel.fetch_message(channel.last_message_id)
-    # チャンネルの一番古いメッセージを取得
-    limit_msg = [msg async for msg in channel.history(limit=1, oldest_first=True)][0]
-    
-    # 終了フラグをFalseに設定
-    end_flag = False
     # 返信先メッセージをリストに格納
     messages = []
-    # 返信先メッセージをhistoryの最初の位置に設定
-    loop_start_msg = start_msg
-    # 件数指定が1未満の場合は1を設定
+    
+    try:
+        if counts:
+            counts = int(counts)
+    except:
+        counts = None
+    
+    try:
+        if minutes:
+            minutes = int(minutes)
+    except:
+        minutes = None
+    
+    # 件数指定があり、1未満の場合は1を設定
     if counts is not None and counts < 1:
         counts = 1
-    # 件数指定があればその件数を設定
-    elif counts is not None:
-        counts = int(counts)
-    # 件数指定がない場合は一旦None
-    else:
-        counts = None
-        # 件数指定も時間指定もない場合は10分を設定
-        if minutes is None:
-            minutes = 10
+    # 時間指定があり、1未満の場合は1を設定
+    if minutes is not None and minutes < 1:
+        minutes = 1
+
+    # 件数指定も時間指定もない場合は10分を設定
+    if counts is None and minutes is None:
+        minutes = 10
+    # 時間指定がある場合は、時間範囲を抽出した後、件数でフィルタ
     if minutes:
-        # 時間指定がある場合、取得するメッセージの範囲を計算
         end_time = datetime.now(JST) - timedelta(minutes=int(minutes))
-
-    messages = [msg async for msg in channel.history(after=end_time, limit=counts, oldest_first=False)]
-    del messages[0]
-
+        messages = [msg async for msg in channel.history(after=end_time, oldest_first=False) if not msg.content.startswith('!')]
+        if counts:
+            messages = messages[:counts]
+    else:
+        # 時間指定がない場合は、直近から件数分のメッセージを取得
+        messages = [msg async for msg in channel.history(limit=counts, oldest_first=False) if not msg.content.startswith('!')]
+        
     # リストを古い順にソート
     messages.sort(key=lambda m: m.created_at)
 
-    msg_ids = [message.id for message in messages]
-    return msg_ids
+    return messages
 
 #=====一時ファイルの削除=====
 def remove_tmp_file(filename: str):
@@ -834,9 +824,8 @@ async def export_vote_csv(interaction, result, msg_id, dt, mode):
 # OCR関係
 #---------------
 #=====添付画像バイナリ取得処理=====
-async def get_image(channel, msg_id):
+async def get_image(channel, message):
     print("[start: get_image]")
-    message = await channel.fetch_message(msg_id)
     
     # 添付画像がなければNoneを返す
     if not message.attachments:
@@ -1177,15 +1166,14 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
 async def milkbot_talk(guild_id, channel):
     log_texts = all_data[guild_id]["log_texts"]
 
-    # 指定範囲内のメッセージidを取得
-    msg_ids = await collect_message(channel=channel.id, counts=10)
+    # 指定範囲内のメッセージを取得
+    messages = await collect_message(channel=channel, counts=10)
 
     # メッセージをログに記録
     add_log_text(guild_id, channel.id)
-    log_texts[channel.id] = {}
-    for msg_id in msg_ids:
-        message = await channel.fetch_message(msg_id)
-        log_texts[message.channel.id].append({
+    log_texts[channel.id] = []
+    for message in messages:
+        log_texts[channel.id].append({
             "time": message.created_at,
             "name": message.author.nick or message.author.display_name or message.author.name,
             "text": message.content.strip()
@@ -1230,7 +1218,7 @@ async def milkbot_talk(guild_id, channel):
 """
     response_text = ai_handler(prompt, text)
 
-    await channel.send = (response_text)
+    await channel.send(response_text)
     log_texts[channel.id] = {}
 
 #===============
@@ -1875,12 +1863,12 @@ async def table_ocr(
     status_msg = await ctx.respond(content=f"{bot.user.display_name}が考え中…🤔")
 
     # 指定した範囲のメッセージを取得
-    msg_ids = await collect_message(ctx.interaction.channel, counts, minutes)
+    messages = await collect_message(ctx.interaction.channel, counts, minutes)
 
     # メッセージから画像データを取得してリストに格納
     all_contents = []
-    for msg_id in msg_ids:
-        contents = await get_image(ctx.interaction.channel, msg_id)
+    for message in messages:
+        contents = await get_image(ctx.interaction.channel, message)
         if contents:
             all_contents.extend(contents)
 
@@ -2057,13 +2045,12 @@ async def make_log(
         minutes = 30
     # 指定範囲内のメッセージidを取得
     channel = ctx.channel
-    msg_ids = await collect_message(channel=channel, minutes=minutes, counts=None)
+    messages = await collect_message(channel=channel, minutes=minutes, counts=None)
 
     # メッセージをログに記録
     add_log_text(ctx.guild.id, channel.id)
     log_texts[message.channel.id] = {}
-    for msg_id in msg_ids:
-        message = await channel.fetch_message(msg_id)
+    for message in messages:
         log_texts[message.channel.id].append({
             "time": message.created_at,
             "name": message.author.nick or message.author.display_name or message.author.name,
