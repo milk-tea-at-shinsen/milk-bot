@@ -1167,7 +1167,7 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
 # AIチャット関係
 #---------------
 # AIチャット処理
-async def milkbot_talk(guild_id, channel):
+async def milkbot_talk(guild_id, channel, wait_msg):
     log_texts = all_data[guild_id]["log_texts"]
 
     # 指定範囲内のメッセージを取得
@@ -1233,7 +1233,7 @@ async def milkbot_talk(guild_id, channel):
 """
     response_text = ai_handler(prompt, text)
 
-    await channel.send(response_text)
+    await wait_msg.edit(response_text)
     log_texts[channel.id] = {}
 
 #===============
@@ -1549,7 +1549,8 @@ async def on_message(message):
         await handle_make_list(message)
     # メッセージがAIチャットチャンネルに投稿された場合、AIチャット処理を行う
     if message.channel.id in ai_chat_channels:
-        await milkbot_talk(message.guild.id, message.channel)
+        wait_msg = await channel.send(f"{bot.name}が考え中…🤔"}
+        await milkbot_talk(message.guild.id, message.channel, wait_msg)
     # 録音実施中かつ、メッセージが録音実行チャンネルに投稿された場合はログに追加
     vc = message.guild.voice_client
     ts = message.created_at.astimezone(JST)
