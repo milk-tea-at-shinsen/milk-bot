@@ -1038,14 +1038,11 @@ def write_vc_log(guild_id, channel_id, start_time=None):
         
         return filename
 
-#=====録音後処理=====
-async def after_recording(sink, channel: discord.TextChannel, start_time: datetime, *args):
-    print("[start: after_recording]")
+#=====録音ログ化処理=====
+async def process_voice_to_log(sink, channel: discord.TextChannel, start_time: datetime):
+    print("[start: process_voice_to_log]")
     guild_id = channel.guild.id
     log_texts = all_data[guild_id]["log_texts"]
-    await channel.send(f"⏹会議の記録を停止したよ🫡")
-    status_msg = await channel.send(f"{bot.user.display_name}が考え中…🤔")
-    await asyncio.sleep(2)
 
     # 録音データを発言者ごとに分解して処理
     for user_id, audio in sink.audio_data.items():
@@ -1108,6 +1105,17 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
                     })
         except Exception as e:
             print(f"error anlyzing voice from {user.nick or user.display_name or user.name}: {e}")
+
+#=====録音後処理=====
+async def after_recording(sink, channel: discord.TextChannel, start_time: datetime, *args):
+    print("[start: after_recording]")
+    guild_id = channel.guild.id
+    log_texts = all_data[guild_id]["log_texts"]
+    await channel.send(f"⏹会議の記録を停止したよ🫡")
+    status_msg = await channel.send(f"{bot.user.display_name}が考え中…🤔")
+    await asyncio.sleep(2)
+
+    await process_voice_to_log(sink, channel, start_time)
 
     filename = write_vc_log(guild_id, channel.id, start_time)
     text = make_gemini_text(guild_id, channel.id)
