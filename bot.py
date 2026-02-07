@@ -1241,6 +1241,16 @@ async def milkbot_talk(guild_id, channel, wait_msg):
 - kaztenの三国志真戦攻略ガイド https://kazten.com/
 - 真戦ナビ https://sangokushi-shinsen.com/
 
+--- 参考サイト ---
+三国志真戦に関する情報は、次のサイトを優先して探してください
+- 三國志真戦公式サイト https://sangokushi.qookkagames.jp/
+- 三國志真戦公式攻略サイト 戦略家幕舎 https://sangokushi-wiki.qookkagames.jp/
+- 三國志真戦公式X https://x.com/shinsen_sgs
+- 貂蝉の三國志真戦攻略サイト https://sangokushi-shinsen.info/
+- 三国志真戦攻略ブログ(リーレ) https://sanngokusinnsenn.com/
+- kaztenの三国志真戦攻略ガイド https://kazten.com/
+- 真戦ナビ https://sangokushi-shinsen.com/
+
 --- 禁止事項 ---
 - 攻撃的、侮辱的、侮蔑的、差別的な発言
 - 下ネタ（ユーザーの発言は受け流しますが、あなたからは発しないようにしてください）
