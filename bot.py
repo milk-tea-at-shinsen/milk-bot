@@ -1371,7 +1371,7 @@ class VoteSelect(View):
                 await interaction.message.delete()
                 await interaction.followup.send(content="️⚠️これ以上選択肢を増やせないよ", view=None, ephemeral=True)
                 return
-            await interaction.response.send_modal(AddOptionInput(msg_id, lim))
+            await interaction.response.send_modal(AddOptionInput(self.guild_id, msg_id, lim))
         # 削除
         elif self.mode == VoteSelectMode.DELETE_VOTE:
             await interaction.response.defer()
