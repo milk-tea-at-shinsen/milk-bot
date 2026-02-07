@@ -1038,14 +1038,11 @@ def write_vc_log(guild_id, channel_id, start_time=None):
         
         return filename
 
-#=====録音後処理=====
-async def after_recording(sink, channel: discord.TextChannel, start_time: datetime, *args):
-    print("[start: after_recording]")
+#=====録音ログ化処理=====
+async def process_voice_to_log(sink, channel: discord.TextChannel, start_time: datetime):
+    print("[start: process_voice_to_log]")
     guild_id = channel.guild.id
     log_texts = all_data[guild_id]["log_texts"]
-    await channel.send(f"⏹会議の記録を停止したよ🫡")
-    status_msg = await channel.send(f"{bot.user.display_name}が考え中…🤔")
-    await asyncio.sleep(2)
 
     # 録音データを発言者ごとに分解して処理
     for user_id, audio in sink.audio_data.items():
@@ -1108,6 +1105,17 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
                     })
         except Exception as e:
             print(f"error anlyzing voice from {user.nick or user.display_name or user.name}: {e}")
+
+#=====録音後処理=====
+async def after_recording(sink, channel: discord.TextChannel, start_time: datetime, *args):
+    print("[start: after_recording]")
+    guild_id = channel.guild.id
+    log_texts = all_data[guild_id]["log_texts"]
+    await channel.send(f"⏹会議の記録を停止したよ🫡")
+    status_msg = await channel.send(f"{bot.user.display_name}が考え中…🤔")
+    await asyncio.sleep(2)
+
+    await process_voice_to_log(sink, channel, start_time)
 
     filename = write_vc_log(guild_id, channel.id, start_time)
     text = make_gemini_text(guild_id, channel.id)
@@ -1222,6 +1230,16 @@ async def milkbot_talk(guild_id, channel, wait_msg):
 - 個別のゲームの具体的な仕様や攻略方法などについては、断定を避け、「～だと思うんだけどちょっと自信がない」などと答えてください
 - オススメの編成など、回答に正解がない質問については、少ない情報から断定的な回答をするのは避け、ユーザーから情報を聞き出すように誘導した上で、適切な回答を絞り込んでください
 - 下ネタには過度に反応せず、自然と受け流してください
+
+--- 参考サイト ---
+三国志真戦に関する情報は、次のサイトを優先して探してください
+- 三國志真戦公式サイト https://sangokushi.qookkagames.jp/
+- 三國志真戦公式攻略サイト 戦略家幕舎 https://sangokushi-wiki.qookkagames.jp/
+- 三國志真戦公式X https://x.com/shinsen_sgs
+- 貂蝉の三國志真戦攻略サイト https://sangokushi-shinsen.info/
+- 三国志真戦攻略ブログ(リーレ) https://sanngokusinnsenn.com/
+- kaztenの三国志真戦攻略ガイド https://kazten.com/
+- 真戦ナビ https://sangokushi-shinsen.com/
 
 --- 参考サイト ---
 三国志真戦に関する情報は、次のサイトを優先して探してください
@@ -1363,7 +1381,7 @@ class VoteSelect(View):
                 await interaction.message.delete()
                 await interaction.followup.send(content="️⚠️これ以上選択肢を増やせないよ", view=None, ephemeral=True)
                 return
-            await interaction.response.send_modal(AddOptionInput(msg_id, lim))
+            await interaction.response.send_modal(AddOptionInput(self.guild_id, msg_id, lim))
         # 削除
         elif self.mode == VoteSelectMode.DELETE_VOTE:
             await interaction.response.defer()
