@@ -1590,7 +1590,7 @@ async def on_message(message):
             "text": message.content.strip()
         })
     # 
-    if message.author.id == 889734500274286663 and message.content[:1] == " ":
+    if message.author.id == 889734500274286663 and message.content[:1] == ".":
         await message.delete()
     
     # その他のコマンドは実行
