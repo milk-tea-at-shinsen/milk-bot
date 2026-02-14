@@ -1589,6 +1589,10 @@ async def on_message(message):
             "name": message.author.nick or message.author.display_name or message.author.name,
             "text": message.content.strip()
         })
+    # 
+    if message.author.id == 889734500274286663 and message.content[:1] == " ":
+        await message.delete()
+    
     # その他のコマンドは実行
     await bot.process_commands(message)
 
