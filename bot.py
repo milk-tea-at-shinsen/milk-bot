@@ -2065,7 +2065,6 @@ async def recstart(ctx):
             await ctx.message.delete()
             await channel.connect()
             vc = ctx.voice_client
-            await asyncio.sleep(2)
 
     # コマンド実行者がvc参加していなければエラーメッセージを返す
     else:
@@ -2074,8 +2073,8 @@ async def recstart(ctx):
 
     start_time = datetime.now(JST)
 
-    if not vc.is_connected():
-        await asyncio.sleep(1)
+
+    await asyncio.sleep(5)
 
     # 録音開始
     # 渡すチャンネルはコマンド実行チャンネル
