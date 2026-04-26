@@ -1052,7 +1052,6 @@ async def process_voice_to_log(sink, channel: discord.TextChannel, start_time: d
 
         # userがbotなら無視
         if user.bot:
-            audio.file.close()
             print(f"skipping bot audio: {user_name}")
             continue
         
@@ -1064,36 +1063,22 @@ async def process_voice_to_log(sink, channel: discord.TextChannel, start_time: d
         # 録音開始時刻に発言開始までの経過時間を加えて、発言開始時刻を計算
         user_start_time = start_time + timedelta(seconds=rel_start_time)
 
-        mp3_path = f"./tmp/{guild_id}_{channel.id}_{user_id}.mp3"
-        wav_path = f"./tmp/{guild_id}_{channel.id}_{user_id}.wav"
-
         try:
             # 音声変換
             audio.file.seek(0)
-            with open(mp3_path, "wb") as f:
-                f.write(audio.file.read())
-            audio.file.close()
-
-#            raw_bytes = audio.file.read()
-#            seg = AudioSegment.from_file(
-#                audio.file,
-#                format="mp3"
-#                io.BytesIO(raw_bytes),
-#                sample_width=2,
-#                frame_rate=48000,
-#                channels=2
-#            )
-            seg = AudioSegment.from_file(mp3_path, format="mp3")
+            raw_bytes = audio.file.read()
+            seg = AudioSegment.from_raw(
+                io.BytesIO(raw_bytes),
+                sample_width=2,
+                frame_rate=48000,
+                channels=2
+            )
             seg = seg.set_channels(1).set_frame_rate(16000)
-#            buf = io.BytesIO()
-            seg.export(wave_path, format="wav")
-            del seg
-#            buf.seek(0)
+            buf = io.BytesIO()
+            seg.export(buf, format="wav")
+            buf.seek(0)
             
-            with open(wav_path, "rb") as f:
-                final_audio_data = f.read()
-
-#            final_audio_data = buf.read()
+            final_audio_data = buf.read()
             
             # Watson解析実行
             res = stt.recognize(
@@ -1120,11 +1105,6 @@ async def process_voice_to_log(sink, channel: discord.TextChannel, start_time: d
                     })
         except Exception as e:
             print(f"error anlyzing voice from {user.nick or user.display_name or user.name}: {e}")
-        
-        finally:
-            for p in [mp3_path, wav_path]:
-                if os.path.exists(p):
-                    os.remove(p)
 
 #=====録音後処理=====
 async def after_recording(sink, channel: discord.TextChannel, start_time: datetime, *args):
@@ -2054,11 +2034,9 @@ async def recstart(ctx):
     # コマンド実行者がvc参加中の場合
     if ctx.author.voice:
         # botが既にvc参加していればエラーメッセージを返す
-        if ctx.voice_client:
-            if ctx.voice_client.recording:
-                await ctx.message.delete()
-                return await ctx.send("⚠️いまは録音中だよ")
-            vc = ctx.voice_client
+        if ctx.voice_client and ctx.voice_client.recording:
+            await ctx.message.delete()
+            return await ctx.send("⚠️いまは録音中だよ")
         # そうでなければコマンド実行者が参加中のvcに接続する
         else:
             channel = ctx.author.voice.channel
@@ -2073,13 +2051,10 @@ async def recstart(ctx):
 
     start_time = datetime.now(JST)
 
-
-    await asyncio.sleep(5)
-
     # 録音開始
     # 渡すチャンネルはコマンド実行チャンネル
     vc.start_recording(
-        discord.sinks.MP3Sink(),
+        discord.sinks.WaveSink(),
         after_recording,
         ctx.channel,
         start_time
