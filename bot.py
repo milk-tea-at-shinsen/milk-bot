@@ -1152,13 +1152,13 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
 --- 会議ログ ---
 """
 
-    summarized_text = ai_handler(prompt, text)
-    print(f"summarized_text: {summarized_text}")
+    summerized_text = ai_handler(prompt, text)
+    print(f"summerized_text: {summerized_text}")
 
     # embed作成
     embed = discord.Embed(
         title="VC会議摘録",
-        description=summarized_text,
+        description=summerized_text,
         color=discord.Color.purple()
     )
     # discordに送信
@@ -1214,7 +1214,7 @@ async def milkbot_talk(guild_id, channel, wait_msg):
 - やわらかく、カジュアルな言葉づかいを好みます
 - ユーザーのことは、「さん」付けで呼びますが、相手の名前が長い場合は適度に端折ることもあります（例：みるくてぃー→みるくさん）
 - 一人称は多用しませんが、使う場合は「わたし」または「みるぼ」としてください
-- 語尾の「にゃん」「にゃー」「にゃ」などは、多くても1回のレスポンスに1回程度までの範囲で使用してください
+- 語尾の「にゃん」「にゃー」「にゃ」などは控えめに(多くても1回のレスポンスに2回程度まで)使用してください
 
 --- 役割 ---
 - Discordサーバーの案内役として、質問に答えたり、雑談に参加してください
@@ -1556,7 +1556,7 @@ async def on_guild_join():
     for guild in bot.guilds:
         preset_dict(guild.id)
 
-# メッセージ受信時処理
+#  メッセージ受信時処理
 @bot.event
 async def on_message(message): 
     print("[start: on_message]")
@@ -2109,45 +2109,13 @@ async def make_log(
     # ログをcsv化して保存
     filename = write_vc_log(guild_id, channel.id)
     text = make_gemini_text(guild_id, channel.id)
-    prompt = f"""
-以下は、Discordのボイスチャット会議のログです。
-内容を分析し、以下のガイドラインに従って議事録を作成してください。
-
---- 前提条件 ---
-- あなたはプロの議事録作成アシスタントです
-- 会議の内容を正確に把握し、要点を簡潔にまとめてください
-- 音声認識による誤認識の可能性や、話し手による言い間違いの可能性も考慮し、文脈から正しい内容を推測してください
-- 出力は指定した4項目の見出しと、その内容のみとし、前置きや結びの言葉、メタ情報などは一切含めないでください
-- 4項目の順番は入れ替えないでください
-- 全体の文字数は、Markdown記法や空白などを含めて最大4000文字以内に収めてください
-
---- 出力内容 ---
-### 会議概要
-- 日時、参加者を記載
-### 議題
-- 会議の主なテーマを記載
-### 議事概要
-- 議事内容を構造化し、要約して箇条書きで記載
-### 決定事項
-- 合意・決定した事項や次回までの検討事項を記載
-- 該当がない場合は「特になし」と記載
-
---- 出力フォーマット ---
-- Markdown記法で記載してください
-- 見出しのレベルは###を使用し、###の後に半角スペースを入れてください
-- 箇条書きには-を使用し、-の後に半角スペースを入れてください
-- コードブロック(```)は使用しないでください
-
---- 会議ログ ---
-"""
-
-    summarized_text = ai_handler(prompt, text)
-    print(f"summarized_text: {summarized_text}")
+    summerized_text = make_summery(text)
+    print(f"summerized_text: {summerized_text}")
 
     # embed作成
     embed = discord.Embed(
         title="チャット会議摘録",
-        description=summarized_text,
+        description=summerized_text,
         color=discord.Color.purple()
     )
     # discordに送信
@@ -2174,7 +2142,7 @@ async def add_aichat_ch(ctx):
     add_ai_channel(ctx.guild.id, channel_id)
     
     await ctx.message.delete()
-    await ctx.send(f"{channel_name}でみるぼとお話しよう🐱")
+    await ctx.send(f"{channel_name}でみるぼとお話しよう😺")
 
 #=====remove_aichat_ch コマンド=====
 @bot.command()
@@ -2188,7 +2156,7 @@ async def remove_aichat_ch(ctx):
     
     if remove_ch:
         await ctx.message.delete()
-        await ctx.send(f"{channel_name}でのお話を終了したよ🐱")
+        await ctx.send(f"{channel_name}でのお話を終了したよ🫡")
     else:
         await ctx.message.delete()
         await ctx.send(content=f"⚠️{channel_name}はみるぼとお話してないよ")
