@@ -1572,7 +1572,7 @@ async def on_message(message):
             "text": message.content.strip()
         })
     # その他のコマンドは実行
-    await bot.process_commands(message)
+    #await bot.process_commands(message)
 
 #===============
 # コマンド定義
