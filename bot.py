@@ -2012,9 +2012,13 @@ async def recstart(ctx):
     print(f"--- Debug Start ---")
     print(f"Voice Client: {ctx.guild.voice_client}")
     if ctx.guild.voice_client:
+        await ctx.guild.voice_client.disconnect(force=True)
+        # 内部的なキャッシュも念のため消去
+        ctx.guild._state._get_voice_client(ctx.guild.id)
         print(f"Is Connected: {ctx.guild.voice_client.is_connected()}")
         print(f"Channel: {ctx.guild.voice_client.channel}")
     print(f"--- Debug End ---")
+
     # コマンド実行者がvc参加中の場合
     if ctx.author.voice:
         # botが既にvc参加していればエラーメッセージを返す
