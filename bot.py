@@ -2009,6 +2009,12 @@ async def remove_from_list(ctx: discord.ApplicationContext, message: discord.Mes
 #=====recstart コマンド=====
 @bot.command(name="recstart")
 async def recstart(ctx):
+    print(f"--- Debug Start ---")
+    print(f"Voice Client: {ctx.guild.voice_client}")
+    if ctx.guild.voice_client:
+        print(f"Is Connected: {ctx.guild.voice_client.is_connected()}")
+        print(f"Channel: {ctx.guild.voice_client.channel}")
+    print(f"--- Debug End ---")
     # コマンド実行者がvc参加中の場合
     if ctx.author.voice:
         # botが既にvc参加していればエラーメッセージを返す
