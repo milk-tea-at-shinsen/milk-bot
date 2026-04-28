@@ -2006,19 +2006,12 @@ async def remove_from_list(ctx: discord.ApplicationContext, message: discord.Mes
 #---------------
 # 会議ログ作成関係
 #---------------
-#=====recstart コマンド=====
+""" #=====recstart コマンド=====
 @bot.command(name="recstart")
 async def recstart(ctx):
-    print(f"--- Debug Start ---")
-    print(f"Voice Client: {ctx.guild.voice_client}")
     if ctx.guild.voice_client:
         await ctx.guild.voice_client.disconnect(force=True)
-        # 内部的なキャッシュも念のため消去
         ctx.guild._state._get_voice_client(ctx.guild.id)
-        await asyncio.sleep(1)  # 1秒だけ接続完了を待つ
-        print(f"Is Connected: {ctx.guild.voice_client.is_connected() if ctx.guild.voice_client else 'Disconnected'}")
-        print(f"Channel: {ctx.guild.voice_client.channel}")
-    print(f"--- Debug End ---")
 
     # コマンド実行者がvc参加中の場合
     if ctx.author.voice:
@@ -2030,18 +2023,8 @@ async def recstart(ctx):
         else:
             channel = ctx.author.voice.channel
             await ctx.message.delete()
-            #await channel.connect()
-            #vc = ctx.voice_client
-            vc = await channel.connect(reconnect=True, timeout=20.0)
-        
-        # 【重要】Python 3.12の高速化による「追い越し」を防ぐため、
-        # 内部的なボイスハンドシェイクが完了するまで最大5秒だけ待機する
-        for _ in range(10):
-            if vc.is_connected():
-                break
-            await asyncio.sleep(0.5)
-            
-        print(f"Final Connection Check: {vc.is_connected()}")
+            await channel.connect()
+            vc = ctx.voice_client
 
     # コマンド実行者がvc参加していなければエラーメッセージを返す
     else:
@@ -2062,7 +2045,57 @@ async def recstart(ctx):
     # 録音セッション辞書にコマンド実行チャンネルのIDを追加
     add_log_text(ctx.guild.id, ctx.channel.id)
 
-    await ctx.send("⏺会議の記録を開始したよ🫡")
+    await ctx.send("⏺会議の記録を開始したよ🫡") """
+#=====recstart コマンド=====
+@bot.command(name="recstart")
+async def recstart(ctx):
+    # 既存の接続があれば強制切断してクリーンにする
+    if ctx.guild.voice_client:
+        await ctx.guild.voice_client.disconnect(force=True)
+        # 内部状態をクリアするための気休め（Noneを期待）
+        ctx.guild._state._get_voice_client(ctx.guild.id)
+
+    # コマンド実行者がVCに参加していない場合はガード
+    if not ctx.author.voice:
+        await ctx.message.delete()
+        return await ctx.send("⚠️先にボイスチャンネルに参加してね")
+
+    # 録音中の重複チェック
+    if ctx.voice_client and ctx.voice_client.recording:
+        await ctx.message.delete()
+        return await ctx.send("⚠️いまは録音中だよ")
+
+    channel = ctx.author.voice.channel
+    await ctx.message.delete()
+    
+    start_time = datetime.now(JST)
+
+    try:
+        # 1. 接続プロセスを開始し、返り値を直接vcに格納（Noneを回避する商用スタイル）
+        # Python 3.12の仕様に合わせて、タイムアウトと再接続設定を明示
+        vc = await channel.connect(reconnect=True, timeout=20.0)
+        
+        # 2. 接続ステータスの判定をあえてスキップし、即座に録音を開始
+        # （connectが完了した＝道は開いたとみなす直感重視の設計）
+        vc.start_recording(
+            discord.sinks.WaveSink(),
+            after_recording, # コールバック関数
+            ctx.channel,
+            start_time
+        )
+        
+        # 録音セッション辞書にチャンネルIDを追加
+        add_log_text(ctx.guild.id, ctx.channel.id)
+        
+        print(f"Recording started successfully. Endpoint: {vc.endpoint}")
+        await ctx.send("⏺会議の記録を開始したよ🫡")
+
+    except Exception as e:
+        print(f"Failed to start recording: {e}")
+        # 失敗した場合はリセットしてユーザーに通知
+        if ctx.guild.voice_client:
+            await ctx.guild.voice_client.disconnect(force=True)
+        await ctx.send(f"⚠️録音の開始に失敗しちゃった。もう一度試してみてね。({e})")
 
 #=====recstop コマンド=====
 @bot.command(name="recstop")
