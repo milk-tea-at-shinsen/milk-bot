@@ -2075,27 +2075,23 @@ async def recstart(ctx):
 
     try:
         # 1. 接続プロセスを開始
-        vc = await channel.connect(reconnect=True, timeout=20.0)
+        # 【重要】self_deaf=True を追加して、Bot側の余計な受信処理をカットします。
+        # また、reconnectを一度Falseにして「一発勝負」で繋ぎます。
+        vc = await channel.connect(reconnect=False, timeout=20.0, self_deaf=True)
         
-        # 2. 【重要】Python 3.12対策：is_connected() が True になるまで最大5秒待機
-        # これを入れないと「Not connected to voice channel」で即落ちします
-        is_ready = False
-        for i in range(10): # 0.5秒 × 10回 = 5秒
-            if vc.is_connected():
-                is_ready = True
-                break
-            await asyncio.sleep(0.5)
+        # 2. Python 3.12対策：判定が不安定なら「1秒」だけ絶対待機して突っ込む
+        # ライブラリの is_connected() 判定自体がバグっている可能性を考慮します。
+        await asyncio.sleep(2.0)
             
-        if not is_ready:
-            raise Exception("ボイスサーバーへの接続待機がタイムアウトしました")
+        print(f"Pre-Recording Attempt - is_connected: {vc.is_connected()}, Endpoint: {vc.endpoint}")
 
         # 3. 録音を開始
-        # Pycordのstart_recordingは、コールバックに(sink, *args)を渡す仕様です
+        # ここで失敗しても、エラーメッセージから「理由」がわかるようにします
         vc.start_recording(
             discord.sinks.WaveSink(),
-            after_recording, # コールバック
-            ctx.channel,     # after_recordingの第2引数へ
-            start_time       # after_recordingの第3引数へ
+            after_recording, 
+            ctx.channel,     
+            start_time       
         )
         
         # 録音セッション辞書にチャンネルIDを追加
@@ -2108,7 +2104,10 @@ async def recstart(ctx):
         print(f"Failed to start recording: {e}")
         # 失敗した場合はリセット
         if ctx.guild.voice_client:
-            await ctx.guild.voice_client.disconnect(force=True)
+            try:
+                await ctx.guild.voice_client.disconnect(force=True)
+            except:
+                pass
         await ctx.send(f"⚠️録音の開始に失敗しちゃった。({e})")
 
 #=====recstop コマンド=====
