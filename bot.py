@@ -2015,7 +2015,8 @@ async def recstart(ctx):
         await ctx.guild.voice_client.disconnect(force=True)
         # 内部的なキャッシュも念のため消去
         ctx.guild._state._get_voice_client(ctx.guild.id)
-        print(f"Is Connected: {ctx.guild.voice_client.is_connected()}")
+        await asyncio.sleep(1)  # 1秒だけ接続完了を待つ
+        print(f"Is Connected: {ctx.guild.voice_client.is_connected() if ctx.guild.voice_client else 'Disconnected'}")
         print(f"Channel: {ctx.guild.voice_client.channel}")
     print(f"--- Debug End ---")
 
