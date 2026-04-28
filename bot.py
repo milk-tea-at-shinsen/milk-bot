@@ -2030,8 +2030,9 @@ async def recstart(ctx):
         else:
             channel = ctx.author.voice.channel
             await ctx.message.delete()
-            await channel.connect()
-            vc = ctx.voice_client
+            #await channel.connect()
+            #vc = ctx.voice_client
+            vc = await channel.connect(reconnect=True, timeout=20.0)
 
     # コマンド実行者がvc参加していなければエラーメッセージを返す
     else:
