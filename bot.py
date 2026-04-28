@@ -2033,6 +2033,15 @@ async def recstart(ctx):
             #await channel.connect()
             #vc = ctx.voice_client
             vc = await channel.connect(reconnect=True, timeout=20.0)
+        
+        # 【重要】Python 3.12の高速化による「追い越し」を防ぐため、
+        # 内部的なボイスハンドシェイクが完了するまで最大5秒だけ待機する
+        for _ in range(10):
+            if vc.is_connected():
+                break
+            await asyncio.sleep(0.5)
+            
+        print(f"Final Connection Check: {vc.is_connected()}")
 
     # コマンド実行者がvc参加していなければエラーメッセージを返す
     else:
