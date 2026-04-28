@@ -2051,8 +2051,11 @@ async def recstart(ctx):
 async def recstart(ctx):
     # 既存の接続があれば強制切断してクリーンにする
     if ctx.guild.voice_client:
-        await ctx.guild.voice_client.disconnect(force=True)
-        # 内部状態をクリアするための気休め（Noneを期待）
+        try:
+            await ctx.guild.voice_client.disconnect(force=True)
+        except:
+            pass
+        # 内部状態をクリア
         ctx.guild._state._get_voice_client(ctx.guild.id)
 
     # コマンド実行者がVCに参加していない場合はガード
@@ -2071,17 +2074,28 @@ async def recstart(ctx):
     start_time = datetime.now(JST)
 
     try:
-        # 1. 接続プロセスを開始し、返り値を直接vcに格納（Noneを回避する商用スタイル）
-        # Python 3.12の仕様に合わせて、タイムアウトと再接続設定を明示
+        # 1. 接続プロセスを開始
         vc = await channel.connect(reconnect=True, timeout=20.0)
         
-        # 2. 接続ステータスの判定をあえてスキップし、即座に録音を開始
-        # （connectが完了した＝道は開いたとみなす直感重視の設計）
+        # 2. 【重要】Python 3.12対策：is_connected() が True になるまで最大5秒待機
+        # これを入れないと「Not connected to voice channel」で即落ちします
+        is_ready = False
+        for i in range(10): # 0.5秒 × 10回 = 5秒
+            if vc.is_connected():
+                is_ready = True
+                break
+            await asyncio.sleep(0.5)
+            
+        if not is_ready:
+            raise Exception("ボイスサーバーへの接続待機がタイムアウトしました")
+
+        # 3. 録音を開始
+        # Pycordのstart_recordingは、コールバックに(sink, *args)を渡す仕様です
         vc.start_recording(
             discord.sinks.WaveSink(),
-            after_recording, # コールバック関数
-            ctx.channel,
-            start_time
+            after_recording, # コールバック
+            ctx.channel,     # after_recordingの第2引数へ
+            start_time       # after_recordingの第3引数へ
         )
         
         # 録音セッション辞書にチャンネルIDを追加
@@ -2092,10 +2106,10 @@ async def recstart(ctx):
 
     except Exception as e:
         print(f"Failed to start recording: {e}")
-        # 失敗した場合はリセットしてユーザーに通知
+        # 失敗した場合はリセット
         if ctx.guild.voice_client:
             await ctx.guild.voice_client.disconnect(force=True)
-        await ctx.send(f"⚠️録音の開始に失敗しちゃった。もう一度試してみてね。({e})")
+        await ctx.send(f"⚠️録音の開始に失敗しちゃった。({e})")
 
 #=====recstop コマンド=====
 @bot.command(name="recstop")
