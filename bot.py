@@ -2056,15 +2056,19 @@ async def recstart(ctx):
 
     start_time = datetime.now(JST)
 
-    # 録音開始
-    # 渡すチャンネルはコマンド実行チャンネル
-    print("[start recording]")
-    vc.start_recording(
-        discord.sinks.WaveSink(),
-        after_recording,
-        ctx.channel,
-        start_time
-    )
+    try:
+        # 録音開始
+        # 渡すチャンネルはコマンド実行チャンネル
+        vc.start_recording(
+            discord.sinks.WaveSink(),
+            after_recording,
+            ctx.channel,
+            start_time
+        )
+        print("[start recording]")
+    
+    except Exception as e:
+        print(f"[error: not start recording: {e}]")
 
     # 録音セッション辞書にコマンド実行チャンネルのIDを追加
     add_log_text(ctx.guild.id, ctx.channel.id)
