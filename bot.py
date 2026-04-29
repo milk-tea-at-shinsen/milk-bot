@@ -2006,7 +2006,7 @@ async def remove_from_list(ctx: discord.ApplicationContext, message: discord.Mes
 #---------------
 # 会議ログ作成関係
 #---------------
-#=====recstart コマンド=====
+"""#=====recstart コマンド=====
 @bot.command(name="recstart")
 async def recstart(ctx):
     # 既存の接続があれば掃除
@@ -2052,6 +2052,58 @@ async def recstart(ctx):
 
     except Exception as e:
         print(f"Recording Error: {e}")
+        await ctx.send(f"⚠️録音の開始に失敗しちゃった。({e})")"""
+
+#=====recstart コマンド（鉄壁版）=====
+@bot.command(name="recstart")
+async def recstart(ctx):
+    # 1. 既存の接続を徹底的に掃除
+    if ctx.voice_client:
+        await ctx.voice_client.disconnect(force=True)
+        await asyncio.sleep(1) # 切断が完了するのを少し待つ
+
+    # 2. VC参加チェック
+    if not ctx.author.voice:
+        await ctx.message.delete()
+        return await ctx.send("⚠️先にボイスチャンネルに参加してね")
+
+    channel = ctx.author.voice.channel
+    await ctx.message.delete()
+    
+    start_time = datetime.now(JST)
+
+    try:
+        # 3. 接続開始（ここでしっかり待つ）
+        print(f"Connecting to {channel}...")
+        vc = await channel.connect(timeout=20.0, reconnect=True)
+        
+        # 4. 【重要】接続が完全に確立されるまで待機
+        # これを入れないと MissingSentinel エラーが出やすいです
+        count = 0
+        while not vc.is_connected():
+            await asyncio.sleep(0.5)
+            count += 1
+            if count > 20: # 10秒待ってもダメなら諦める
+                raise Exception("接続タイムアウトしちゃった…")
+
+        print("Connection established! Starting recording...")
+        await asyncio.sleep(1) # 念押しの1秒
+
+        # 5. 録音開始
+        vc.start_recording(
+            discord.sinks.WaveSink(),
+            after_recording,
+            ctx.channel,
+            start_time
+        )
+        
+        add_log_text(ctx.guild.id, ctx.channel.id)
+        await ctx.send("⏺会議の記録を開始したよ🫡")
+
+    except Exception as e:
+        print(f"Recording Error Detail: {e}")
+        if ctx.voice_client:
+            await ctx.voice_client.disconnect(force=True)
         await ctx.send(f"⚠️録音の開始に失敗しちゃった。({e})")
 
 #=====recstop コマンド=====
