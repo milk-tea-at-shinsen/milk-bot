@@ -2075,15 +2075,9 @@ async def recstart(ctx):
     try:
         # 3. 接続開始（ここでしっかり待つ）
         print(f"Connecting to {channel}...")
-        vc = await channel.connect(
-            timeout=20.0, 
-            reconnect=True,
-            # ↓ ここが重要！
-            self_deaf=True,
-            self_mute=False
-        )
+        vc = await channel.connect(timeout=20.0)
 
-        await asyncio.sleep(2)
+        await asyncio.sleep(3)
         
         # 4. 【重要】接続が完全に確立されるまで待機
         # これを入れないと MissingSentinel エラーが出やすいです
