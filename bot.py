@@ -2031,10 +2031,13 @@ async def remove_from_list(ctx: discord.ApplicationContext, message: discord.Mes
 #=====recstart コマンド=====
 @bot.command(name="recstart")
 async def recstart(ctx):
+    print("[start: recstart]")
     # コマンド実行者がvc参加中の場合
     if ctx.author.voice:
+        print("[author in vc]")
         # botが既にvc参加していればエラーメッセージを返す
         if ctx.voice_client and ctx.voice_client.recording:
+            print("[bot in vc and recording]")
             await ctx.message.delete()
             return await ctx.send("⚠️いまは録音中だよ")
         # そうでなければコマンド実行者が参加中のvcに接続する
@@ -2043,9 +2046,11 @@ async def recstart(ctx):
             await ctx.message.delete()
             await channel.connect()
             vc = ctx.voice_client
+            print(f"[join to {channel}]")
 
     # コマンド実行者がvc参加していなければエラーメッセージを返す
     else:
+        print("[author not in vc]")
         await ctx.message.delete()
         return await ctx.send("⚠️先にボイスチャンネルに参加してね")
 
@@ -2053,6 +2058,7 @@ async def recstart(ctx):
 
     # 録音開始
     # 渡すチャンネルはコマンド実行チャンネル
+    print("[start recording]")
     vc.start_recording(
         discord.sinks.WaveSink(),
         after_recording,
