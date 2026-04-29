@@ -2042,11 +2042,14 @@ async def recstart(ctx):
             return await ctx.send("⚠️いまは録音中だよ")
         # そうでなければコマンド実行者が参加中のvcに接続する
         else:
-            channel = ctx.author.voice.channel
-            await ctx.message.delete()
-            await channel.connect()
-            vc = ctx.voice_client
-            print(f"[join to {channel}]")
+            try:
+                channel = ctx.author.voice.channel
+                await ctx.message.delete()
+                await channel.connect()
+                vc = ctx.voice_client
+                print(f"[join to {channel}]")
+            except Exception as e:
+                print(f"[error: not join to {channel}]")
 
     # コマンド実行者がvc参加していなければエラーメッセージを返す
     else:
@@ -2068,7 +2071,7 @@ async def recstart(ctx):
         print("[start recording]")
     
     except Exception as e:
-        print(f"[error: not start recording: {e}]")
+        return print(f"[error: not start recording: {e}]")
 
     # 録音セッション辞書にコマンド実行チャンネルのIDを追加
     add_log_text(ctx.guild.id, ctx.channel.id)
