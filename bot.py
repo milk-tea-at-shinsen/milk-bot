@@ -2075,18 +2075,18 @@ async def recstart(ctx):
 
     try:
         # 1. 接続プロセスを開始
-        # 【重要】self_deaf=True を追加して、Bot側の余計な受信処理をカットします。
-        # また、reconnectを一度Falseにして「一発勝負」で繋ぎます。
-        vc = await channel.connect(reconnect=False, timeout=20.0, self_deaf=True)
+        # 【修正】self_deaf ではなく deaf を使用します。
+        # 3.12の不安定さを考慮し、一度シンプルに接続します。
+        vc = await channel.connect(reconnect=True, timeout=20.0, deaf=True)
         
-        # 2. Python 3.12対策：判定が不安定なら「1秒」だけ絶対待機して突っ込む
-        # ライブラリの is_connected() 判定自体がバグっている可能性を考慮します。
+        # 2. Python 3.12対策：接続直後の「None状態」を避けるため、
+        # 2秒待機してライブラリ内部のステータス更新を待ちます。
         await asyncio.sleep(2.0)
             
         print(f"Pre-Recording Attempt - is_connected: {vc.is_connected()}, Endpoint: {vc.endpoint}")
 
         # 3. 録音を開始
-        # ここで失敗しても、エラーメッセージから「理由」がわかるようにします
+        # ここで RecordingException が出る場合は、ライブラリが接続完了を検知できていません。
         vc.start_recording(
             discord.sinks.WaveSink(),
             after_recording, 
