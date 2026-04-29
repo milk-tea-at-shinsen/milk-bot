@@ -2075,8 +2075,7 @@ async def recstart(ctx):
 
     try:
         # 1. 接続プロセスを開始
-        # 【修正】引数を一切排除し、ライブラリの標準仕様に合わせます。
-        # これで "unexpected keyword argument" は100%出なくなります。
+        # 引数を一切持たせない標準の connect() に修正しました。
         vc = await channel.connect()
         
         # 2. Python 3.12対策：接続直後の「None状態」を避けるため、
@@ -2088,9 +2087,9 @@ async def recstart(ctx):
         # 3. 録音を開始
         vc.start_recording(
             discord.sinks.WaveSink(),
-            after_recording, 
-            ctx.channel,     
-            start_time       
+            after_recording, # コールバック
+            ctx.channel,     # after_recording の引数へ
+            start_time       # after_recording の引数へ
         )
         
         # 録音セッション辞書にチャンネルIDを追加
