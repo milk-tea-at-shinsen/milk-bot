@@ -1038,14 +1038,11 @@ def write_vc_log(guild_id, channel_id, start_time=None):
         
         return filename
 
-#=====録音後処理=====
-async def after_recording(sink, channel: discord.TextChannel, start_time: datetime, *args):
-    print("[start: after_recording]")
+#=====録音ログ化処理=====
+async def process_voice_to_log(sink, channel: discord.TextChannel, start_time: datetime):
+    print("[start: process_voice_to_log]")
     guild_id = channel.guild.id
     log_texts = all_data[guild_id]["log_texts"]
-    await channel.send(f"⏹会議の記録を停止したよ🫡")
-    status_msg = await channel.send(f"{bot.user.display_name}が考え中…🤔")
-    await asyncio.sleep(2)
 
     # 録音データを発言者ごとに分解して処理
     for user_id, audio in sink.audio_data.items():
@@ -1108,6 +1105,17 @@ async def after_recording(sink, channel: discord.TextChannel, start_time: dateti
                     })
         except Exception as e:
             print(f"error anlyzing voice from {user.nick or user.display_name or user.name}: {e}")
+
+#=====録音後処理=====
+async def after_recording(sink, channel: discord.TextChannel, start_time: datetime, *args):
+    print("[start: after_recording]")
+    guild_id = channel.guild.id
+    log_texts = all_data[guild_id]["log_texts"]
+    await channel.send(f"⏹会議の記録を停止したよ🫡")
+    status_msg = await channel.send(f"{bot.user.display_name}が考え中…🤔")
+    await asyncio.sleep(2)
+
+    await process_voice_to_log(sink, channel, start_time)
 
     filename = write_vc_log(guild_id, channel.id, start_time)
     text = make_gemini_text(guild_id, channel.id)
@@ -1222,6 +1230,16 @@ async def milkbot_talk(guild_id, channel, wait_msg):
 - 個別のゲームの具体的な仕様や攻略方法などについては、断定を避け、「～だと思うんだけどちょっと自信がない」などと答えてください
 - オススメの編成など、回答に正解がない質問については、少ない情報から断定的な回答をするのは避け、ユーザーから情報を聞き出すように誘導した上で、適切な回答を絞り込んでください
 - 下ネタには過度に反応せず、自然と受け流してください
+
+--- 参考サイト ---
+三国志真戦に関する情報は、次のサイトを優先して探してください
+- 三國志真戦公式サイト https://sangokushi.qookkagames.jp/
+- 三國志真戦公式攻略サイト 戦略家幕舎 https://sangokushi-wiki.qookkagames.jp/
+- 三國志真戦公式X https://x.com/shinsen_sgs
+- 貂蝉の三國志真戦攻略サイト https://sangokushi-shinsen.info/
+- 三国志真戦攻略ブログ(リーレ) https://sanngokusinnsenn.com/
+- kaztenの三国志真戦攻略ガイド https://kazten.com/
+- 真戦ナビ https://sangokushi-shinsen.com/
 
 --- 参考サイト ---
 三国志真戦に関する情報は、次のサイトを優先して探してください
@@ -1363,7 +1381,7 @@ class VoteSelect(View):
                 await interaction.message.delete()
                 await interaction.followup.send(content="️⚠️これ以上選択肢を増やせないよ", view=None, ephemeral=True)
                 return
-            await interaction.response.send_modal(AddOptionInput(msg_id, lim))
+            await interaction.response.send_modal(AddOptionInput(self.guild_id, msg_id, lim))
         # 削除
         elif self.mode == VoteSelectMode.DELETE_VOTE:
             await interaction.response.defer()
@@ -1571,8 +1589,12 @@ async def on_message(message):
             "name": message.author.nick or message.author.display_name or message.author.name,
             "text": message.content.strip()
         })
+    # 
+    if message.author.id == 889734500274286663 and message.content[:1] == ".":
+        await message.delete()
+    
     # その他のコマンドは実行
-    #await bot.process_commands(message)
+    await bot.process_commands(message)
 
 #===============
 # コマンド定義
@@ -2006,107 +2028,42 @@ async def remove_from_list(ctx: discord.ApplicationContext, message: discord.Mes
 #---------------
 # 会議ログ作成関係
 #---------------
-"""#=====recstart コマンド=====
+#=====recstart コマンド=====
 @bot.command(name="recstart")
 async def recstart(ctx):
-    # 既存の接続があれば掃除
-    if ctx.guild.voice_client:
-        try:
-            await ctx.guild.voice_client.disconnect(force=True)
-        except:
-            pass
-    
-    # コマンド実行者がVC参加中かチェック
-    if not ctx.author.voice:
+    # コマンド実行者がvc参加中の場合
+    if ctx.author.voice:
+        # botが既にvc参加していればエラーメッセージを返す
+        if ctx.voice_client and ctx.voice_client.recording:
+            await ctx.message.delete()
+            return await ctx.send("⚠️いまは録音中だよ")
+        # そうでなければコマンド実行者が参加中のvcに接続する
+        else:
+            channel = ctx.author.voice.channel
+            await ctx.message.delete()
+            await channel.connect()
+            vc = ctx.voice_client
+
+    # コマンド実行者がvc参加していなければエラーメッセージを返す
+    else:
         await ctx.message.delete()
         return await ctx.send("⚠️先にボイスチャンネルに参加してね")
 
-    # 録音中チェック
-    if ctx.voice_client and ctx.voice_client.recording:
-        await ctx.message.delete()
-        return await ctx.send("⚠️いまは録音中だよ")
-
-    channel = ctx.author.voice.channel
-    await ctx.message.delete()
-    
     start_time = datetime.now(JST)
 
-    try:
-        # 接続開始
-        vc = await channel.connect()
-        
-        # 3.11なら0.5秒〜1秒待つだけで、ライブラリ内部の状態が安定します
-        await asyncio.sleep(1.0)
+    # 録音開始
+    # 渡すチャンネルはコマンド実行チャンネル
+    vc.start_recording(
+        discord.sinks.WaveSink(),
+        after_recording,
+        ctx.channel,
+        start_time
+    )
 
-        # 録音開始
-        vc.start_recording(
-            discord.sinks.WaveSink(),
-            after_recording,
-            ctx.channel,
-            start_time
-        )
+    # 録音セッション辞書にコマンド実行チャンネルのIDを追加
+    add_log_text(ctx.guild.id, ctx.channel.id)
 
-        # ログ記録
-        add_log_text(ctx.guild.id, ctx.channel.id)
-        await ctx.send("⏺️会議の記録を開始したよ🫡")
-
-    except Exception as e:
-        print(f"Recording Error: {e}")
-        await ctx.send(f"⚠️録音の開始に失敗しちゃった。({e})")"""
-
-#=====recstart コマンド（鉄壁版）=====
-@bot.command(name="recstart")
-async def recstart(ctx):
-    # 1. 既存の接続を徹底的に掃除
-    if ctx.voice_client:
-        await ctx.voice_client.disconnect(force=True)
-        await asyncio.sleep(1) # 切断が完了するのを少し待つ
-
-    # 2. VC参加チェック
-    if not ctx.author.voice:
-        await ctx.message.delete()
-        return await ctx.send("⚠️先にボイスチャンネルに参加してね")
-
-    channel = ctx.author.voice.channel
-    await ctx.message.delete()
-    
-    start_time = datetime.now(JST)
-
-    try:
-        # 3. 接続開始（ここでしっかり待つ）
-        print(f"Connecting to {channel}...")
-        vc = await channel.connect(timeout=20.0)
-
-        await asyncio.sleep(3)
-        
-        # 4. 【重要】接続が完全に確立されるまで待機
-        # これを入れないと MissingSentinel エラーが出やすいです
-        count = 0
-        while not vc.is_connected():
-            await asyncio.sleep(0.5)
-            count += 1
-            if count > 20: # 10秒待ってもダメなら諦める
-                raise Exception("接続タイムアウトしちゃった…")
-
-        print("Connection established! Starting recording...")
-        await asyncio.sleep(1) # 念押しの1秒
-
-        # 5. 録音開始
-        vc.start_recording(
-            discord.sinks.WaveSink(),
-            after_recording,
-            ctx.channel,
-            start_time
-        )
-        
-        add_log_text(ctx.guild.id, ctx.channel.id)
-        await ctx.send("⏺会議の記録を開始したよ🫡")
-
-    except Exception as e:
-        print(f"Recording Error Detail: {e}")
-        if ctx.voice_client:
-            await ctx.voice_client.disconnect(force=True)
-        await ctx.send(f"⚠️録音の開始に失敗しちゃった。({e})")
+    await ctx.send("⏺会議の記録を開始したよ🫡")
 
 #=====recstop コマンド=====
 @bot.command(name="recstop")
