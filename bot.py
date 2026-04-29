@@ -2006,60 +2006,25 @@ async def remove_from_list(ctx: discord.ApplicationContext, message: discord.Mes
 #---------------
 # 会議ログ作成関係
 #---------------
-""" #=====recstart コマンド=====
-@bot.command(name="recstart")
-async def recstart(ctx):
-    if ctx.guild.voice_client:
-        await ctx.guild.voice_client.disconnect(force=True)
-        ctx.guild._state._get_voice_client(ctx.guild.id)
-
-    # コマンド実行者がvc参加中の場合
-    if ctx.author.voice:
-        # botが既にvc参加していればエラーメッセージを返す
-        if ctx.voice_client and ctx.voice_client.recording:
-            await ctx.message.delete()
-            return await ctx.send("⚠️いまは録音中だよ")
-        # そうでなければコマンド実行者が参加中のvcに接続する
-        else:
-            channel = ctx.author.voice.channel
-            await ctx.message.delete()
-            await channel.connect()
-            vc = ctx.voice_client
-
-    # コマンド実行者がvc参加していなければエラーメッセージを返す
-    else:
-        await ctx.message.delete()
-        return await ctx.send("⚠️先にボイスチャンネルに参加してね")
-
-    start_time = datetime.now(JST)
-
-    # 録音開始
-    # 渡すチャンネルはコマンド実行チャンネル
-    vc.start_recording(
-        discord.sinks.WaveSink(),
-        after_recording,
-        ctx.channel,
-        start_time
-    )
-
-    # 録音セッション辞書にコマンド実行チャンネルのIDを追加
-    add_log_text(ctx.guild.id, ctx.channel.id)
-
-    await ctx.send("⏺会議の記録を開始したよ🫡") """
 #=====recstart コマンド=====
 @bot.command(name="recstart")
 async def recstart(ctx):
-    # 既存の接続を徹底的に掃除（幽霊接続の排除）
+    # 既存の接続があれば掃除
     if ctx.guild.voice_client:
         try:
             await ctx.guild.voice_client.disconnect(force=True)
         except:
             pass
-        ctx.guild._state._get_voice_client(ctx.guild.id)
-
+    
+    # コマンド実行者がVC参加中かチェック
     if not ctx.author.voice:
         await ctx.message.delete()
         return await ctx.send("⚠️先にボイスチャンネルに参加してね")
+
+    # 録音中チェック
+    if ctx.voice_client and ctx.voice_client.recording:
+        await ctx.message.delete()
+        return await ctx.send("⚠️いまは録音中だよ")
 
     channel = ctx.author.voice.channel
     await ctx.message.delete()
@@ -2067,46 +2032,26 @@ async def recstart(ctx):
     start_time = datetime.now(JST)
 
     try:
-        # 1. 接続プロセス
-        # Python 3.12のSSLエラーを回避するため、タイムアウトを長めに設定
-        vc = await channel.connect(timeout=30.0, reconnect=True)
+        # 接続開始
+        vc = await channel.connect()
         
-        # 2. 接続完了の「判定」を待つ
-        # ライブラリの is_connected() は False のままでも、実際には通信できているケースがあるため
-        # 最大10秒待って、endpoint（接続先）が決まれば良しとする
-        is_ready = False
-        for i in range(20): # 0.5秒 × 20回 = 10秒
-            if vc.is_connected():
-                is_ready = True
-                break
-            if vc.endpoint: # ステータスがFalseでも、住所(endpoint)が取れていれば「繋がっている」とみなす
-                print(f"Endpoint confirmed: {vc.endpoint}. Proceeding with potential connection...")
-                is_ready = True
-                break
-            await asyncio.sleep(0.5)
-            
-        print(f"Final Status - Connected: {vc.is_connected()}, Endpoint: {vc.endpoint}")
+        # 3.11なら0.5秒〜1秒待つだけで、ライブラリ内部の状態が安定します
+        await asyncio.sleep(1.0)
 
-        # 3. 録音開始（判定がFalseでもendpointがあれば突っ込む）
-        # これにより、Discord側との「最終的なパケット往復」を強制的に発生させます
+        # 録音開始
         vc.start_recording(
             discord.sinks.WaveSink(),
-            after_recording, 
-            ctx.channel,     
-            start_time       
+            after_recording,
+            ctx.channel,
+            start_time
         )
-        
+
+        # ログ記録
         add_log_text(ctx.guild.id, ctx.channel.id)
-        await ctx.send("⏺会議の記録を開始したよ🫡")
+        await ctx.send("⏺️会議の記録を開始したよ🫡")
 
     except Exception as e:
-        print(f"Critical Failure: {e}")
-        # 失敗時は確実に切断
-        if ctx.guild.voice_client:
-            try:
-                await ctx.guild.voice_client.disconnect(force=True)
-            except:
-                pass
+        print(f"Recording Error: {e}")
         await ctx.send(f"⚠️録音の開始に失敗しちゃった。({e})")
 
 #=====recstop コマンド=====
