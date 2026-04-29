@@ -2075,18 +2075,17 @@ async def recstart(ctx):
 
     try:
         # 1. 接続プロセスを開始
-        # 【修正】self_deaf ではなく deaf を使用します。
-        # 3.12の不安定さを考慮し、一度シンプルに接続します。
-        vc = await channel.connect(reconnect=True, timeout=20.0, deaf=True)
+        # 【修正】引数を一切排除し、ライブラリの標準仕様に合わせます。
+        # これで "unexpected keyword argument" は100%出なくなります。
+        vc = await channel.connect()
         
         # 2. Python 3.12対策：接続直後の「None状態」を避けるため、
-        # 2秒待機してライブラリ内部のステータス更新を待ちます。
-        await asyncio.sleep(2.0)
+        # 3秒待機してライブラリ内部のステータス更新をじっくり待ちます。
+        await asyncio.sleep(3.0)
             
         print(f"Pre-Recording Attempt - is_connected: {vc.is_connected()}, Endpoint: {vc.endpoint}")
 
         # 3. 録音を開始
-        # ここで RecordingException が出る場合は、ライブラリが接続完了を検知できていません。
         vc.start_recording(
             discord.sinks.WaveSink(),
             after_recording, 
