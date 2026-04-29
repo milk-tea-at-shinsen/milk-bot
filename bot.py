@@ -2049,24 +2049,17 @@ async def recstart(ctx):
 #=====recstart コマンド=====
 @bot.command(name="recstart")
 async def recstart(ctx):
-    # 既存の接続があれば強制切断してクリーンにする
+    # 既存の接続を徹底的に掃除（幽霊接続の排除）
     if ctx.guild.voice_client:
         try:
             await ctx.guild.voice_client.disconnect(force=True)
         except:
             pass
-        # 内部状態をクリア
         ctx.guild._state._get_voice_client(ctx.guild.id)
 
-    # コマンド実行者がVCに参加していない場合はガード
     if not ctx.author.voice:
         await ctx.message.delete()
         return await ctx.send("⚠️先にボイスチャンネルに参加してね")
-
-    # 録音中の重複チェック
-    if ctx.voice_client and ctx.voice_client.recording:
-        await ctx.message.delete()
-        return await ctx.send("⚠️いまは録音中だよ")
 
     channel = ctx.author.voice.channel
     await ctx.message.delete()
@@ -2074,33 +2067,41 @@ async def recstart(ctx):
     start_time = datetime.now(JST)
 
     try:
-        # 1. 接続プロセスを開始
-        # 引数を一切持たせない標準の connect() に修正しました。
-        vc = await channel.connect()
+        # 1. 接続プロセス
+        # Python 3.12のSSLエラーを回避するため、タイムアウトを長めに設定
+        vc = await channel.connect(timeout=30.0, reconnect=True)
         
-        # 2. Python 3.12対策：接続直後の「None状態」を避けるため、
-        # 3秒待機してライブラリ内部のステータス更新をじっくり待ちます。
-        await asyncio.sleep(3.0)
+        # 2. 接続完了の「判定」を待つ
+        # ライブラリの is_connected() は False のままでも、実際には通信できているケースがあるため
+        # 最大10秒待って、endpoint（接続先）が決まれば良しとする
+        is_ready = False
+        for i in range(20): # 0.5秒 × 20回 = 10秒
+            if vc.is_connected():
+                is_ready = True
+                break
+            if vc.endpoint: # ステータスがFalseでも、住所(endpoint)が取れていれば「繋がっている」とみなす
+                print(f"Endpoint confirmed: {vc.endpoint}. Proceeding with potential connection...")
+                is_ready = True
+                break
+            await asyncio.sleep(0.5)
             
-        print(f"Pre-Recording Attempt - is_connected: {vc.is_connected()}, Endpoint: {vc.endpoint}")
+        print(f"Final Status - Connected: {vc.is_connected()}, Endpoint: {vc.endpoint}")
 
-        # 3. 録音を開始
+        # 3. 録音開始（判定がFalseでもendpointがあれば突っ込む）
+        # これにより、Discord側との「最終的なパケット往復」を強制的に発生させます
         vc.start_recording(
             discord.sinks.WaveSink(),
-            after_recording, # コールバック
-            ctx.channel,     # after_recording の引数へ
-            start_time       # after_recording の引数へ
+            after_recording, 
+            ctx.channel,     
+            start_time       
         )
         
-        # 録音セッション辞書にチャンネルIDを追加
         add_log_text(ctx.guild.id, ctx.channel.id)
-        
-        print(f"Recording started successfully. Endpoint: {vc.endpoint}")
         await ctx.send("⏺会議の記録を開始したよ🫡")
 
     except Exception as e:
-        print(f"Failed to start recording: {e}")
-        # 失敗した場合はリセット
+        print(f"Critical Failure: {e}")
+        # 失敗時は確実に切断
         if ctx.guild.voice_client:
             try:
                 await ctx.guild.voice_client.disconnect(force=True)
