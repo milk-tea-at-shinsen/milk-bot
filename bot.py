@@ -2062,6 +2062,11 @@ async def recstart(ctx):
             #接続していない場合はコマンド実行者のvcに接続
             vc = await channel.connect()
 
+            for _ in range(20):
+                if vc.is_connected():
+                    break
+                await asyncio.sleep(0.5)
+
         print(f"[connect to vc: {channel}]")
     
     except Exception as e:
