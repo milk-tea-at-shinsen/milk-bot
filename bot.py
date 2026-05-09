@@ -2074,7 +2074,7 @@ async def recstart(ctx):
 
     try:
         vc.start_recording(
-            discord.sinks.WaveSink()
+            discord.sinks.WaveSink(),
             after_recording,
             ctx.channel,
             start_time
