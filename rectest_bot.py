@@ -1,8 +1,8 @@
 import discord
 from discord.ext import commands
 import discord.ext.voice_recv as voice_recv
-from dotenv import load_dotenv
 import os
+from dotenv import load_dotenv
 
 load_dotenv()
 
