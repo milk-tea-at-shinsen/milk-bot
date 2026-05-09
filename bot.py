@@ -30,6 +30,9 @@ import traceback
 
 load_dotenv()
 
+if not opus.is_loaded():
+    opus.load_opus("libopus.so.0")
+
 print(f"discord version: {discord.__version__}")
 print(f"discord opus loaded: {discord.opus.is_loaded()}")
 
