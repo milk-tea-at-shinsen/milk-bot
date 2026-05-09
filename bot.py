@@ -25,8 +25,12 @@ import ctypes
 import ctypes.util
 from pydub import AudioSegment, effects
 from dotenv import load_dotenv
+import traceback
 
 load_dotenv()
+
+print(f"discord version: {discord.__version__}")
+print(f"discord opus loaded: {discord.opus.is_loaded()}")
 
 #=====Botの準備=====
 intents = discord.Intents.default()
@@ -2032,51 +2036,60 @@ async def remove_from_list(ctx: discord.ApplicationContext, message: discord.Mes
 @bot.command(name="recstart")
 async def recstart(ctx):
     print("[start: recstart]")
-    # コマンド実行者がvc参加中の場合
-    if ctx.author.voice:
-        print("[author in vc]")
-        # botが既にvc参加していればエラーメッセージを返す
-        if ctx.voice_client and ctx.voice_client.recording:
-            print("[bot in vc and recording]")
-            await ctx.message.delete()
-            return await ctx.send("⚠️いまは録音中だよ")
-        # そうでなければコマンド実行者が参加中のvcに接続する
-        else:
-            try:
-                channel = ctx.author.voice.channel
-                await ctx.message.delete()
-                await channel.connect()
-                vc = ctx.voice_client
-                print(f"[join to {channel}]")
-            except Exception as e:
-                print(f"[error: not join to {channel}]")
 
-    # コマンド実行者がvc参加していなければエラーメッセージを返す
-    else:
+    # コマンド実行者がvcに未参加の場合
+    if not ctx.author.voice:
         print("[author not in vc]")
         await ctx.message.delete()
         return await ctx.send("⚠️先にボイスチャンネルに参加してね")
+    
+    channel = ctx.author.voice.channel
 
+    try:
+        # 既に接続済みの場合
+        if ctx.voice_client:
+            vc = ctx.voice_client
+
+            # 別のvcにいる場合、コマンド実行者のvcに移動
+            if vc.channel != channel:
+                await vc.move_to(channel)
+        
+        else:
+            #接続していない場合はコマンド実行者のvcに接続
+            vc = await channel.connect()
+
+        print(f"[connect to vc: {channel}]")
+    
+    except Exception as e:
+        print(f"[error: not connect vc: {e}]")
+        return await ctx.send(f"⚠️VCへの接続に失敗したよ: {e}")
+    
+    # すでに録音中の場合
+    if getattr(vc, "recording", False):
+        print("[already recording]")
+        await ctx.message.delete()
+        return await ctx.send("⚠️すでに録音中だよ")
+    
     start_time = datetime.now(JST)
 
     try:
-        # 録音開始
-        # 渡すチャンネルはコマンド実行チャンネル
         vc.start_recording(
-            discord.sinks.WaveSink(),
+            discord.sinks.WaveSink()
             after_recording,
             ctx.channel,
             start_time
         )
+
         print("[start recording]")
     
     except Exception as e:
-        return print(f"[error: not start recording: {e}]")
-
-    # 録音セッション辞書にコマンド実行チャンネルのIDを追加
+        print(f"[error: not start recording: {e}]")
+        return await ctx.send(f"⚠️VCの録音開始に失敗したよ: {e}")
+    
     add_log_text(ctx.guild.id, ctx.channel.id)
 
-    await ctx.send("⏺会議の記録を開始したよ🫡")
+    await ctx.message.delete()
+    await ctx.send("⏺️会議の録音を開始したよ🫡")
 
 #=====recstop コマンド=====
 @bot.command(name="recstop")
