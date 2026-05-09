@@ -1,7 +1,10 @@
 import discord
 from discord.ext import commands
 import discord.ext.voice_recv as voice_recv
+from dotenv import load_dotenv
 import os
+
+load_dotenv()
 
 #=====Botの準備=====
 intents = discord.Intents.default()
