@@ -2081,6 +2081,11 @@ async def recstart(ctx):
     
     start_time = datetime.now(JST)
 
+    print("vc:", vc)
+    print("is_connected:", vc.is_connected())
+    print("ws:", vc.ws)
+    print("socket:", vc.socket)
+
     try:
         vc.start_recording(
             discord.sinks.WaveSink(),
