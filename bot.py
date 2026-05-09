@@ -43,7 +43,6 @@ intents.members = True
 intents.voice_states = True
 intents.guilds = True
 bot = commands.Bot(command_prefix="!", intents=intents)
-print(f"Pycord version: {discord.__version__}")
 
 #=====サービスアカウントキーの読込=====
 #---Vision API---
