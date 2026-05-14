@@ -4,3 +4,4 @@
 node_modules/
 env.txt
 devenv.txt
+venv*/
