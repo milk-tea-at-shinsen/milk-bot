@@ -23,13 +23,17 @@ jobs:
             # 絶対パスで指定する
             if [ "${{ github.ref_name }}" = "main" ]; then
               TARGET_DIR="/root/mybot"
-              SERVICE_NAME="mybot.service"
+              SERVICE_NAME1="mybot.service"
             else
               TARGET_DIR="/root/devbot"
-              SERVICE_NAME="devbot.service"
+              SERVICE_NAME1="devbot.service"
+              SERVICE_NAME2="recbot.service"
             fi
 
-            echo "Deploying to $TARGET_DIR via $SERVICE_NAME..."
+            echo "Deploying to $TARGET_DIR via $SERVICE_NAME1..."
+            if [ "${{ github.ref_name }}" = "dev" ]; then
+              echo "Deploying to $TARGET_DIR via $SERVICE_NAME2..."
+            fi
 
             # フォルダ移動に失敗したらエラーで終了させる（重要！）
             cd $TARGET_DIR || { echo "Error: Directory $TARGET_DIR not found"; exit 1; }
@@ -44,11 +48,17 @@ jobs:
             if [ -f "requirements.txt" ]; then
               # venvへのパスも念のためフルパスで指定
               $TARGET_DIR/venv/bin/pip install -r requirements.txt
+              if [ "${{ github.ref_name }}" = "dev" ]; then
+                $TARGET_DIR/venv_rec/bin/pip install -r requirements_rec.txt
+              fi
             fi
 
             # 4. systemdの再読み込みと再起動
             sudo systemctl daemon-reload
-            sudo systemctl restart $SERVICE_NAME
+            sudo systemctl restart $SERVICE_NAME1
+            if [ "${{ github.ref_name }}" = "dev" ]; then
+              sudo systemctl restart $SERVICE_NAME2
+            fi
             
             # 5. 状態確認
-            systemctl is-active --quiet $SERVICE_NAME && echo "Service is running!" || { echo "Service failed to start"; exit 1; }
+            systemctl is-active --quiet $SERVICE_NAME1 && echo "Service is running!" || { echo "Service failed to start"; exit 1; }
