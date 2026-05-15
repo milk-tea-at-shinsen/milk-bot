@@ -14,6 +14,17 @@ bot = commands.Bot(
     intents=intents
 )
 
+class MySink(voice_recv.AudioSink):
+
+    def wants_opus(self) -> bool:
+        return True
+
+    def write(self, user, data):
+        print(user, len(data.opus))
+
+    def cleanup(self):
+        pass
+
 @bot.event
 async def on_ready():
     print(f"login: {bot.user}")
