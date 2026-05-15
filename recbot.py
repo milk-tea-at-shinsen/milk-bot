@@ -29,6 +29,23 @@ async def join(ctx):
     await channel.connect()
     await ctx.send("VC接続OK")
 
+@bot.command()
+async def rec(ctx):
+
+    if not ctx.author.voice:
+        await ctx.send("VCに入ってね")
+        return
+
+    channel = ctx.author.voice.channel
+
+    vc = await channel.connect(
+        cls=voice_recv.VoiceRecvClient
+    )
+
+    vc.listen(MySink())
+
+    await ctx.send("録音開始")
+
 TOKEN = os.getenv("REC_BOT_TOKEN")
 
 bot.run(TOKEN)
