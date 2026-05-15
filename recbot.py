@@ -17,6 +17,17 @@ bot = commands.Bot(
 @bot.event
 async def on_ready():
     print(f"login: {bot.user}")
+    
+@bot.command()
+async def join(ctx):
+    if not ctx.author.voice:
+        await ctx.send("VCに入ってね")
+        return
+
+    channel = ctx.author.voice.channel
+
+    await channel.connect()
+    await ctx.send("VC接続OK")
 
 TOKEN = os.getenv("REC_BOT_TOKEN")
 
