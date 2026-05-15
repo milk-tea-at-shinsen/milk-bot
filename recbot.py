@@ -20,7 +20,9 @@ class MySink(voice_recv.AudioSink):
         return True
 
     def write(self, user, data):
-        print(user, len(data.opus))
+        print("write called")
+        print(user)
+        print(data)
 
     def cleanup(self):
         pass
