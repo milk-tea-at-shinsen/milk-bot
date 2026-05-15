@@ -1,6 +1,6 @@
 import os
 import discord
-from discord.ext import commands
+from discord.ext import commands, voice_recv
 from dotenv import load_dotenv
 
 load_dotenv()
