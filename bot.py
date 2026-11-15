@@ -1425,7 +1425,13 @@ async def on_message(message):
         await handle_make_list(message)
  
     # メッセージがAIチャットチャンネルに投稿された場合、AIチャット処理を行う
-    if message.channel.id in ai_chat_channels:
+    has_other_mention = (
+        any(user.id != bot.user.id for user in message.mentions)
+        or bool(message.role_mentions)
+        or message.mention_everyone
+    )
+
+    if message.channel.id in ai_chat_channels and not has_other_mention:
         wait_msg = await message.channel.send(f"{bot.user.display_name}が考え中…🤔")
         await milkbot_talk(message.guild.id, message.channel, wait_msg)
     
@@ -1746,8 +1752,8 @@ async def export_members(ctx: discord.ApplicationContext):
 @clean_slash_options
 async def table_ocr(
     ctx: discord.ApplicationContext,
-    counts: discord.Option(str, description="指定時間(分)", required=False),
-    minutes: discord.Option(str, description="指定件数(件)", required=False)
+    counts: discord.Option(str, description="指定件数(件)", required=False),
+    minutes: discord.Option(str, description="指定時間(分)", required=False)
 ):
     status_msg = await ctx.respond(content=f"{bot.user.display_name}が考え中…🤔")
 
