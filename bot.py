@@ -1746,8 +1746,8 @@ async def export_members(ctx: discord.ApplicationContext):
 @clean_slash_options
 async def table_ocr(
     ctx: discord.ApplicationContext,
-    counts: discord.Option(str, description="指定時間(分)", required=False),
-    minutes: discord.Option(str, description="指定件数(件)", required=False)
+    counts: discord.Option(str, description="指定件数(件)", required=False),
+    minutes: discord.Option(str, description="指定時間(分)", required=False)
 ):
     status_msg = await ctx.respond(content=f"{bot.user.display_name}が考え中…🤔")
 
