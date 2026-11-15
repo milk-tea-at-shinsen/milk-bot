@@ -10,7 +10,7 @@ import os
 import json
 import emoji
 from enum import Enum
-import csv, io
+import csv
 from google.cloud import vision
 from google.oauth2 import service_account
 from google import genai
@@ -19,11 +19,6 @@ import aiohttp
 import requests
 from functools import wraps
 import inspect
-from ibm_watson import SpeechToTextV1
-from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
-import ctypes
-import ctypes.util
-from pydub import AudioSegment, effects
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -32,7 +27,6 @@ load_dotenv()
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
-intents.voice_states = True
 intents.guilds = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 print(f"Pycord version: {discord.__version__}")
@@ -47,13 +41,10 @@ vision_client = vision.ImageAnnotatorClient(credentials=credentials)
 
 #---Gemini API---
 gemini_client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-
-#---Watson STT---
-WATSON_STT_API_KEY = os.getenv("WATSON_STT_API_KEY")
-WATSON_STT_URL = os.getenv("WATSON_STT_URL")
-authenticator = IAMAuthenticator(WATSON_STT_API_KEY)
-stt = SpeechToTextV1(authenticator=authenticator)
-stt.set_service_url(WATSON_STT_URL)
+AI_ERROR_MESSAGE = (
+    "⚠️ごめんね、みるぼは今うまくお話できないみたい。"
+    "少し待ってから、もう一度声をかけてね🫡"
+)
 
 #===================================
 # 定数・グローバル変数・辞書の準備
@@ -316,6 +307,7 @@ def add_ai_channel(guild_id, channel_id):
 #---ログテキスト辞書---
 def add_log_text(guild_id, channel_id):
     print("[start: add_log_text]")
+
     log_texts = all_data[guild_id]["log_texts"]
     # channel_idが辞書になければ辞書に行を追加
     if channel_id not in log_texts:
@@ -463,6 +455,10 @@ def ai_handler(prompt, text):
         config=config
     )
     return response.text
+
+async def notify_ai_error(status_message, error):
+    print(f"AI error ({type(error).__name__}): {error}")
+    await status_message.edit(content=AI_ERROR_MESSAGE)
 
 #---------------
 # その他共通処理
@@ -1011,190 +1007,16 @@ async def handle_make_list(message):
 # 会議ログ作成関係
 #---------------
 #=====vcログ作成=====
-def write_vc_log(guild_id, channel_id, start_time=None):
-    print("[start: write_vc_log]")
-    log_texts = all_data[guild_id]["log_texts"]
+def write_chat_log(guild_id, channel_id):
+    logs = all_data[guild_id]["log_texts"].get(channel_id, [])
+    if not logs:
+        return None
+    logs.sort(key=lambda item: item["time"])
+    start_time = logs[0]["time"]
+    filename = f"./tmp/chat_log_{channel_id}_{start_time.astimezone(JST).strftime('%Y%m%d_%H%M%S')}.csv"
+    make_csv(filename, [[item["time"].astimezone(JST).strftime("%Y/%m/%d %H:%M:%S"), item["name"], item["text"]] for item in logs], {"title": "chat_log", "logged_at": start_time.astimezone(JST).strftime("%Y/%m/%d %H:%M")}, ["time", "name", "text"])
+    return filename
 
-    if channel_id in log_texts:
-        logs = log_texts[channel_id]
-        # セッションを時間順にソート
-        logs.sort(key=lambda x: x["time"])
-        if start_time is None:
-            start_time = logs[0]["time"]
-        
-        # CSVファイル作成
-        filename = f"./tmp/vc_log_{channel_id}_{start_time.astimezone(JST).strftime('%Y%m%d_%H%M%S')}.csv"
-        meta = {
-            "title": "vc_log",
-            "speeched_at": start_time.astimezone(JST).strftime("%Y/%m/%d %H:%M")
-        }
-        header = ["time", "name", "text"]
-        rows = [
-            [item["time"].astimezone(JST).strftime("%Y/%m/%d %H:%M:%S"), item["name"], item["text"]]
-            for item in logs
-        ]
-        make_csv(filename, rows, meta, header)
-        print(f"saved vc log: {filename}")
-        
-        return filename
-
-#=====録音ログ化処理=====
-async def process_voice_to_log(sink, channel: discord.TextChannel, start_time: datetime):
-    print("[start: process_voice_to_log]")
-    guild_id = channel.guild.id
-    log_texts = all_data[guild_id]["log_texts"]
-
-    # 録音データを発言者ごとに分解して処理
-    for user_id, audio in sink.audio_data.items():
-        # 表示名の取得
-        user = channel.guild.get_member(user_id) or await channel.guild.fetch_member(user_id)
-        user_name = user.nick or user.display_name or user.name
-
-        # userがbotなら無視
-        if user.bot:
-            audio.file.close()
-            print(f"skipping bot audio: {user_name}")
-            continue
-        
-        # 発言開始までの経過時間の取得
-        rel_start_time = getattr(audio, "first_packet", 0)
-        if rel_start_time == 0:
-            rel_start_time = getattr(audio, "timestamp", 0)
-        
-        # 録音開始時刻に発言開始までの経過時間を加えて、発言開始時刻を計算
-        user_start_time = start_time + timedelta(seconds=rel_start_time)
-
-        mp3_path = f"./tmp/{guild_id}_{channel.id}_{user_id}.mp3"
-        wav_path = f"./tmp/{guild_id}_{channel.id}_{user_id}.wav"
-
-        try:
-            # 音声変換
-            audio.file.seek(0)
-            with open(mp3_path, "wb") as f:
-                f.write(audio.file.read())
-            audio.file.close()
-
-#            raw_bytes = audio.file.read()
-#            seg = AudioSegment.from_file(
-#                audio.file,
-#                format="mp3"
-#                io.BytesIO(raw_bytes),
-#                sample_width=2,
-#                frame_rate=48000,
-#                channels=2
-#            )
-            seg = AudioSegment.from_file(mp3_path, format="mp3")
-            seg = seg.set_channels(1).set_frame_rate(16000)
-#            buf = io.BytesIO()
-            seg.export(wave_path, format="wav")
-            del seg
-#            buf.seek(0)
-            
-            with open(wav_path, "rb") as f:
-                final_audio_data = f.read()
-
-#            final_audio_data = buf.read()
-            
-            # Watson解析実行
-            res = stt.recognize(
-                audio=final_audio_data,
-                content_type="audio/wav",
-                model="ja-JP_Multimedia",
-                timestamps=True
-            ).get_result()
-            
-            print(f"res: {res}")
-            
-            # 解析後のデータにそれぞれの発言時刻を付与
-            if res and "results" in res:
-                for result in res["results"]:
-                    # 発言開始時刻に発言開始からの経過時間を加算して、それぞれの時刻を計算
-                    rel_start = result["alternatives"][0]["timestamps"][0][1]
-                    actual_start = user_start_time + timedelta(seconds=rel_start)
-                    transcript = result["alternatives"][0]["transcript"]
-                    
-                    log_texts[channel.id].append({
-                        "time": actual_start,
-                        "name": user_name,
-                        "text": transcript.strip()
-                    })
-        except Exception as e:
-            print(f"error anlyzing voice from {user.nick or user.display_name or user.name}: {e}")
-        
-        finally:
-            for p in [mp3_path, wav_path]:
-                if os.path.exists(p):
-                    os.remove(p)
-
-#=====録音後処理=====
-async def after_recording(sink, channel: discord.TextChannel, start_time: datetime, *args):
-    print("[start: after_recording]")
-    guild_id = channel.guild.id
-    log_texts = all_data[guild_id]["log_texts"]
-    await channel.send(f"⏹会議の記録を停止したよ🫡")
-    status_msg = await channel.send(f"{bot.user.display_name}が考え中…🤔")
-    await asyncio.sleep(2)
-
-    await process_voice_to_log(sink, channel, start_time)
-
-    filename = write_vc_log(guild_id, channel.id, start_time)
-    text = make_gemini_text(guild_id, channel.id)
-    
-    prompt = f"""
-以下は、Discordのボイスチャット会議のログです。
-内容を分析し、以下のガイドラインに従って議事録を作成してください。
-
---- 前提条件 ---
-- あなたはプロの議事録作成アシスタントです
-- 会議の内容を正確に把握し、要点を簡潔にまとめてください
-- 音声認識による誤認識の可能性や、話し手による言い間違いの可能性も考慮し、文脈から正しい内容を推測してください
-- 出力は指定した4項目の見出しと、その内容のみとし、前置きや結びの言葉、メタ情報などは一切含めないでください
-- 4項目の順番は入れ替えないでください
-- 全体の文字数は、Markdown記法や空白などを含めて最大4000文字以内に収めてください
-
---- 出力内容 ---
-### 会議概要
-- 日時、参加者を記載
-### 議題
-- 会議の主なテーマを記載
-### 議事概要
-- 議事内容を構造化し、要約して箇条書きで記載
-### 決定事項
-- 合意・決定した事項や次回までの検討事項を記載
-- 該当がない場合は「特になし」と記載
-
---- 出力フォーマット ---
-- Markdown記法で記載してください
-- 見出しのレベルは###を使用し、###の後に半角スペースを入れてください
-- 箇条書きには-を使用し、-の後に半角スペースを入れてください
-- コードブロック(```)は使用しないでください
-
---- 会議ログ ---
-"""
-
-    summarized_text = ai_handler(prompt, text)
-    print(f"summarized_text: {summarized_text}")
-
-    # embed作成
-    embed = discord.Embed(
-        title="VC会議摘録",
-        description=summarized_text,
-        color=discord.Color.purple()
-    )
-    # discordに送信
-    await status_msg.edit(content="", embed=embed)
-    await channel.send(content="VCのログを作成したよ🫡", file=discord.File(filename))
-
-    # 一時ファイルを削除
-    remove_tmp_file(filename)
-    
-    # ログテキスト辞書からチャンネルIDを削除
-    remove_log_text(guild_id, channel.id, channel.name)
-
-#---------------
-# AIチャット関係
-#---------------
-# AIチャット処理
 async def milkbot_talk(guild_id, channel, wait_msg):
     log_texts = all_data[guild_id]["log_texts"]
 
@@ -1280,10 +1102,13 @@ async def milkbot_talk(guild_id, channel, wait_msg):
 
 --- 会話ログ ---
 """
-    response_text = ai_handler(prompt, text)
-
-    await wait_msg.edit(response_text)
-    log_texts[channel.id] = {}
+    try:
+        response_text = ai_handler(prompt, text)
+        await wait_msg.edit(response_text)
+    except Exception as e:
+        await notify_ai_error(wait_msg, e)
+    finally:
+        log_texts[channel.id] = {}
 
 #===============
 # クラス定義
@@ -1580,6 +1405,7 @@ async def on_guild_join():
 @bot.event
 async def on_message(message): 
     print("[start: on_message]")
+ 
     # Botのメッセージは無視
     if message.author.bot:
         return
@@ -1588,28 +1414,22 @@ async def on_message(message):
         return
     make_list_channels = all_data[message.guild.id]["make_list_channels"]
     ai_chat_channels = all_data[message.guild.id]["ai_chat_channels"]
-    log_texts = all_data[message.guild.id]["log_texts"]
+
     # コマンドは実行して終了
     if message.content.startswith("!"):
         await bot.process_commands(message)
         return
+
     # メッセージがリスト化対象チャンネルに投稿された場合、リスト化処理を行う
     if message.channel.id in make_list_channels:
         await handle_make_list(message)
+ 
     # メッセージがAIチャットチャンネルに投稿された場合、AIチャット処理を行う
     if message.channel.id in ai_chat_channels:
         wait_msg = await message.channel.send(f"{bot.user.display_name}が考え中…🤔")
         await milkbot_talk(message.guild.id, message.channel, wait_msg)
-    # 録音実施中かつ、メッセージが録音実行チャンネルに投稿された場合はログに追加
-    vc = message.guild.voice_client
-    ts = message.created_at.astimezone(JST)
-    if (vc and vc.recording and message.channel.id in log_texts):
-        log_texts[message.channel.id].append({
-            "time": ts,
-            "name": message.author.nick or message.author.display_name or message.author.name,
-            "text": message.content.strip()
-        })
-    # 
+    
+    # 管理者秘密のメッセージ
     if message.author.id == 889734500274286663 and message.content[:1] == ".":
         await message.delete()
     
@@ -2048,57 +1868,6 @@ async def remove_from_list(ctx: discord.ApplicationContext, message: discord.Mes
 #---------------
 # 会議ログ作成関係
 #---------------
-#=====recstart コマンド=====
-@bot.command(name="recstart")
-async def recstart(ctx):
-    # コマンド実行者がvc参加中の場合
-    if ctx.author.voice:
-        # botが既にvc参加していればエラーメッセージを返す
-        if ctx.voice_client and ctx.voice_client.recording:
-            await ctx.message.delete()
-            return await ctx.send("⚠️いまは録音中だよ")
-        # そうでなければコマンド実行者が参加中のvcに接続する
-        else:
-            channel = ctx.author.voice.channel
-            await ctx.message.delete()
-            await channel.connect()
-            vc = ctx.voice_client
-
-    # コマンド実行者がvc参加していなければエラーメッセージを返す
-    else:
-        await ctx.message.delete()
-        return await ctx.send("⚠️先にボイスチャンネルに参加してね")
-
-    start_time = datetime.now(JST)
-
-    # 録音開始
-    # 渡すチャンネルはコマンド実行チャンネル
-    vc.start_recording(
-        discord.sinks.MP3Sink(),
-        after_recording,
-        ctx.channel,
-        start_time
-    )
-
-    # 録音セッション辞書にコマンド実行チャンネルのIDを追加
-    add_log_text(ctx.guild.id, ctx.channel.id)
-
-    await ctx.send("⏺会議の記録を開始したよ🫡")
-
-#=====recstop コマンド=====
-@bot.command(name="recstop")
-async def recstop(ctx):
-    vc = ctx.voice_client
-    # botがvcに参加している場合
-    if vc:
-        if vc.recording:
-            await ctx.message.delete()
-            vc.stop_recording()
-            await vc.disconnect()
-        else:
-            await ctx.message.delete()
-            await ctx.send("⚠️いまは録音してないよ")
-
 #=====/make_log コマンド=====
 @bot.slash_command(name="make_log", description="指定時間前から現在までのメッセージのログと要約を作成するよ")
 @clean_slash_options
@@ -2106,6 +1875,7 @@ async def make_log(
     ctx: discord.ApplicationContext,
     minutes: discord.Option(str, description="指定時間(分)", default=None)
 ):
+    guild_id = ctx.guild.id
     log_texts = all_data[guild_id]["log_texts"]
     status_msg = await ctx.respond(content=f"{bot.user.display_name}が考え中…🤔")
 
@@ -2117,17 +1887,17 @@ async def make_log(
     messages = await collect_message(channel=channel, minutes=minutes, counts=None)
 
     # メッセージをログに記録
-    add_log_text(ctx.guild.id, channel.id)
-    log_texts[message.channel.id] = {}
+    add_log_text(guild_id, channel.id)
+    log_texts[channel.id] = []
     for message in messages:
-        log_texts[message.channel.id].append({
+        log_texts[channel.id].append({
             "time": message.created_at,
             "name": message.author.nick or message.author.display_name or message.author.name,
             "text": message.content.strip()
         })
 
     # ログをcsv化して保存
-    filename = write_vc_log(guild_id, channel.id)
+    filename = write_chat_log(guild_id, channel.id)
     text = make_gemini_text(guild_id, channel.id)
     prompt = f"""
 以下は、Discordのボイスチャット会議のログです。
@@ -2160,25 +1930,29 @@ async def make_log(
 
 --- 会議ログ ---
 """
+    try:
+        summarized_text = ai_handler(prompt, text)
+        print(f"summarized_text: {summarized_text}")
 
-    summarized_text = ai_handler(prompt, text)
-    print(f"summarized_text: {summarized_text}")
+        # embed作成
+        embed = discord.Embed(
+            title="チャット会議摘録",
+            description=summarized_text,
+            color=discord.Color.purple()
+        )
+        # discordに送信
+        await status_msg.edit(content="", embed=embed)
+        await channel.send(content="チャット会議のログを作成したよ🫡", file=discord.File(filename))
 
-    # embed作成
-    embed = discord.Embed(
-        title="チャット会議摘録",
-        description=summarized_text,
-        color=discord.Color.purple()
-    )
-    # discordに送信
-    await status_msg.edit(content="", embed=embed)
-    await channel.send(content="チャット会議のログを作成したよ🫡", file=discord.File(filename))
+    except Exception as e:
+        await notify_ai_error(status_msg, e)
 
-    # 一時ファイルを削除
-    remove_tmp_file(filename)
-    
-    # 録音セッション辞書からチャンネルIDを削除
-    remove_log_text(guild_id, channel.id, channel.name)
+    finally:
+        # 一時ファイルを削除
+        remove_tmp_file(filename)
+        
+        # 録音セッション辞書からチャンネルIDを削除
+        remove_log_text(guild_id, channel.id, channel.name)
 
 #---------------
 # AIチャット関係
