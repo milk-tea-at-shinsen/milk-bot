@@ -1425,7 +1425,13 @@ async def on_message(message):
         await handle_make_list(message)
  
     # メッセージがAIチャットチャンネルに投稿された場合、AIチャット処理を行う
-    if message.channel.id in ai_chat_channels:
+    has_other_mention = (
+        any(user.id != bot.user.id for user in message.mentions)
+        or bool(message.role_mentions)
+        or message.mention_everyone
+    )
+
+    if message.channel.id in ai_chat_channels and not has_other_mention:
         wait_msg = await message.channel.send(f"{bot.user.display_name}が考え中…🤔")
         await milkbot_talk(message.guild.id, message.channel, wait_msg)
     
