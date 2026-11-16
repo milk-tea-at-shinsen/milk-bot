@@ -42,8 +42,27 @@ vision_client = vision.ImageAnnotatorClient(credentials=credentials)
 #---Gemini API---
 gemini_client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 AI_ERROR_MESSAGE = (
-    "⚠️ごめんね、みるぼは今うまくお話できないみたい。"
-    "少し待ってから、もう一度声をかけてね🫡"
+    "⚠️ごめんね、みるぼ、ちょっと調子が悪いみたいにゃ〜💦\n"
+    "しばらく時間を置いてから、もう一度試してみてね"
+)
+AI_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024  # 10MB
+AI_ATTACHMENT_MIME_TYPES = [
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+    "image/gif",
+    "image/webp",
+    "application/pdf"
+]
+AI_ATTACHMENT_COUNT_ERROR_MESSAGE = (
+    "⚠️ごめんね、みるぼが読める添付ファイルは1回に1つまでにゃ〜💦"
+)
+AI_ATTACHMENT_SIZE_ERROR_MESSAGE = (
+    "⚠️ごめんね、添付ファイルは10MBまでにしてほしいにゃ〜💦"
+)
+AI_ATTACHMENT_TYPE_ERROR_MESSAGE = (
+    "⚠️ごめんね、みるぼが読めるのは画像(png, jpeg, gif, webp)と\n"
+    "pdfだけなんだにゃ〜💦"
 )
 
 #===================================
@@ -445,17 +464,47 @@ def make_gemini_text(guild_id, channel_id):
     return text
     
 #=====AIへの発注処理=====
-def ai_handler(prompt, text):
+def ai_handler(prompt, text, attachment_part=None):
     contexts = f"{prompt}\n{text}"
     search_tool = types.Tool(google_search=types.GoogleSearch())
     config = types.GenerateContentConfig(tools=[search_tool])
+    contents = [contexts]
+    contents.append(attachment_part) if attachment_part is not None else None
     response = gemini_client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=contexts,
+        contents=contents,
         config=config
     )
     return response.text
 
+#=====AIに渡す添付ファイルの取得・確認処理=====
+async def get_ai_attachment(message):
+    # 添付ファイルがない場合はNoneを返す
+    if not message.attachments:
+        return None, None
+    
+    # 添付ファイルが複数ある場合はエラーを返す
+    if len(message.attachments) > 1:
+        return None, AI_ATTACHMENT_COUNT_ERROR_MESSAGE
+
+    attachment = message.attachments[0]
+    
+    # 添付ファイルのサイズが10MBを超える場合はエラーを返す
+    if attachment.size > AI_ATTACHMENT_MAX_BYTES:
+        return None, AI_ATTACHMENT_SIZE_ERROR_MESSAGE
+    
+    # 添付ファイルの種類が指定されたもの以外の場合はエラーを返す
+    if attachment.content_type not in AI_ATTACHMENT_MIME_TYPES:
+        return None, AI_ATTACHMENT_TYPE_ERROR_MESSAGE
+
+    # 添付ファイルをパッケージングして返す
+    attachment_part = types.Part.from_bytes(
+        data=await attachment.read(),
+        mime_type=attachment.content_type
+    )
+    return attachment_part, None
+
+#=====AIエラー通知処理=====
 async def notify_ai_error(status_message, error):
     print(f"AI error ({type(error).__name__}): {error}")
     await status_message.edit(content=AI_ERROR_MESSAGE)
@@ -1017,8 +1066,21 @@ def write_chat_log(guild_id, channel_id):
     make_csv(filename, [[item["time"].astimezone(JST).strftime("%Y/%m/%d %H:%M:%S"), item["name"], item["text"]] for item in logs], {"title": "chat_log", "logged_at": start_time.astimezone(JST).strftime("%Y/%m/%d %H:%M")}, ["time", "name", "text"])
     return filename
 
-async def milkbot_talk(guild_id, channel, wait_msg):
+async def milkbot_talk(message, wait_msg):
+    guild_id = message.guild.id
+    channel = message.channel
     log_texts = all_data[guild_id]["log_texts"]
+
+    # 添付ファイルの取得と確認
+    try:
+        attachment_part, attachment_error = await get_ai_attachment(message)
+    except Exception as e:
+        await notify_ai_error(wait_msg, e)
+        return
+    
+    if attachment_error:
+        await wait_msg.edit(content=attachment_error)
+        return
 
     # 指定範囲内のメッセージを取得
     messages = await collect_message(channel=channel, counts=10)
@@ -1066,22 +1128,10 @@ async def milkbot_talk(guild_id, channel, wait_msg):
 
 --- 対話方針 ---
 - 分からないことについては、知ったかぶりせずに、「みるぼ、それはあんまり詳しくないにゃ〜」などとかわいくはぐらかしてください
-- 推測で答えるときは、「だと思う」「かもしれない」などを用い、断定を避けてください
+- 十分な情報源がなく、推測で答えるときは、「だと思う」「かもしれない」などを用い、断定を避けてください
 - ユーザーから誤りを指摘された場合は、素直に「ごめん、みるぼ間違えちゃった〜」などと謝ってください
 - ユーザーが、あなたの答えについて疑問を呈したときには、「そうかもしれないにゃ〜、みるぼ、自信がなくなってきた〜」などと、相手の意見を受け止めつつ、断定を避けるようにしてください
-- 個別のゲームの具体的な仕様や攻略方法などについては、断定を避け、「～だと思うんだけどちょっと自信がない」などと答えてください
-- オススメの編成など、回答に正解がない質問については、少ない情報から断定的な回答をするのは避け、ユーザーから情報を聞き出すように誘導した上で、適切な回答を絞り込んでください
 - 下ネタには過度に反応せず、自然と受け流してください
-
---- 参考サイト ---
-三国志真戦に関する情報は、次のサイトを優先して探してください
-- 三國志真戦公式サイト https://sangokushi.qookkagames.jp/
-- 三國志真戦公式攻略サイト 戦略家幕舎 https://sangokushi-wiki.qookkagames.jp/
-- 三國志真戦公式X https://x.com/shinsen_sgs
-- 貂蝉の三國志真戦攻略サイト https://sangokushi-shinsen.info/
-- 三国志真戦攻略ブログ(リーレ) https://sanngokusinnsenn.com/
-- kaztenの三国志真戦攻略ガイド https://kazten.com/
-- 真戦ナビ https://sangokushi-shinsen.com/
 
 --- 参考サイト ---
 三国志真戦に関する情報は、次のサイトを優先して探してください
@@ -1103,7 +1153,7 @@ async def milkbot_talk(guild_id, channel, wait_msg):
 --- 会話ログ ---
 """
     try:
-        response_text = ai_handler(prompt, text)
+        response_text = ai_handler(prompt, text, attachment_part)
         await wait_msg.edit(response_text)
     except Exception as e:
         await notify_ai_error(wait_msg, e)
@@ -1424,7 +1474,7 @@ async def on_message(message):
     if message.channel.id in make_list_channels:
         await handle_make_list(message)
  
-    # メッセージがAIチャットチャンネルに投稿された場合、AIチャット処理を行う
+    # AIチャットチャンネルで、Bot以外のメンションがない場合にのみAIチャット処理を行う
     has_other_mention = (
         any(user.id != bot.user.id for user in message.mentions)
         or bool(message.role_mentions)
@@ -1433,7 +1483,7 @@ async def on_message(message):
 
     if message.channel.id in ai_chat_channels and not has_other_mention:
         wait_msg = await message.channel.send(f"{bot.user.display_name}が考え中…🤔")
-        await milkbot_talk(message.guild.id, message.channel, wait_msg)
+        await milkbot_talk(message, wait_msg)
     
     # 管理者秘密のメッセージ
     if message.author.id == 889734500274286663 and message.content[:1] == ".":
