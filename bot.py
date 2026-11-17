@@ -99,6 +99,10 @@ try:
         for guild_id, guild_dict in all_data.items():
             # リマインダー辞書キーのdtをdatetime型に戻す
             all_data[guild_id]["reminders"] = {datetime.fromisoformat(key): value for key, value in guild_dict["reminders"].items()}
+            # 攻城予定辞書キーのdtをdatetime型に戻す
+            all_data[guild_id]["npc_attack_plans"] = {datetime.fromisoformat(key): value for key, value in guild_dict["npc_attack_plans"].items()}
+            # 作戦予定辞書キーのdtをdatetime型に戻す
+            all_data[guild_id]["operation_plans"] = {datetime.fromisoformat(key): value for key, value in guild_dict["operation_plans"].items()}
             # 投票辞書キーのmsg_idをint型に戻す
             all_data[guild_id]["votes"] = {int(key): value for key, value in guild_dict["votes"].items()}
             # 代理投票辞書キーのmsg_idをint型に戻す
@@ -170,7 +174,9 @@ def preset_dict(guild_id):
             "proxy_votes": {},
             "make_list_channels": [],
             "log_texts": {},
-            "ai_chat_channels": []
+            "ai_chat_channels": [],
+            "npc_attack_plans": {},
+            "operation_plans": {}
         }
         save_all_data()
 
@@ -186,6 +192,12 @@ def initialize_new_dict():
         # ai_chat_channelsリストがない場合は追加
         if "ai_chat_channels" not in all_data[guild_id]:
                 all_data[guild_id]["ai_chat_channels"] = []
+        # npc_attack_plans辞書がない場合は追加
+        if "npc_attack_plans" not in all_data[guild_id]:
+                all_data[guild_id]["npc_attack_plans"] = {}
+        # operation_plans辞書がない場合は追加
+        if "operation_plans" not in all_data[guild_id]:
+                all_data[guild_id]["operation_plans"] = {}
         print(f"all_data: {all_data}")
         
 #===============
@@ -1159,6 +1171,14 @@ async def milkbot_talk(message, wait_msg):
         await notify_ai_error(wait_msg, e)
     finally:
         log_texts[channel.id] = {}
+
+#---------------
+# メール文面作成関係
+#---------------
+#=====攻城予定作成=====
+def make_attack_npc_mail():
+    print"[start: make_attack_npc_mail]"
+    
 
 #===============
 # クラス定義
