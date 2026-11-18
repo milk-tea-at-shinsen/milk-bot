@@ -243,6 +243,10 @@ def save_all_data():
 
         # reminders辞書のdatetime型をisoformatに直してから保存
         data_to_save[guild_id]["reminders"] = {dt.isoformat(): value for dt, value in guild_dict["reminders"].items()}
+        # npc_attack_plans辞書のdatetime型をisoformatに直してから保存
+        data_to_save[guild_id]["npc_attack_plans"] = {dt.isoformat(): value for dt, value in guild_dict["npc_attack_plans"].items()}
+        # operation_plans辞書のdatetime型をisoformatに直してから保存
+        data_to_save[guild_id]["operation_plans"] = {dt.isoformat(): value for dt, value in guild_dict["operation_plans"].items()}
         # log_texts辞書を空にしてから保存
         data_to_save[guild_id]["log_texts"] = {}
 
@@ -344,6 +348,22 @@ def add_log_text(guild_id, channel_id):
     if channel_id not in log_texts:
         log_texts[channel_id] = []
 
+#---攻城予定辞書---
+def add_npc_attack_plan(guild_id, dt, target, main_force, tank_unit, comment):
+    npc_attack_plans = all_data[guild_id]["npc_attack_plans"]
+    # 日時が辞書になければ辞書に行を追加
+    if dt not in npc_attack_plans:
+        npc_attack_plans[dt] = []
+    # 辞書に項目を登録
+    npc_attack_plans[dt].append(
+        {"target": target,
+         "main_force": main_force,
+         "tank_unit": tank_unit,
+         "comment": comment}
+    )
+    # json保存前処理
+    save_all_data()
+
 #=====辞書からの削除処理=====
 #---リマインダー辞書---
 def remove_reminder(guild_id, dt, idx=None):
@@ -443,6 +463,33 @@ def remove_log_text(guild_id, channel_id, channel_name):
     else:
         print(f"{channel_name}の録音セッションがありません")
         return
+
+#---攻城予定辞書---
+def remove_npc_attack_plan(guild_id, dt, idx=None):
+    npc_attack_plans = all_data[guild_id]["npc_attack_plans"]
+    # idxがNoneの場合は日時全体を削除、そうでなければ指定インデックスの行を削除
+    if idx is None:
+        if dt in npc_attack_plans:
+            removed = npc_attack_plans[dt]
+            del npc_attack_plans[dt]
+            save_all_data()
+            print(f"攻城予定を削除: {dt.strftime('%Y/%m/%d %H:%M')}")
+            return removed
+        else:
+            print(f"削除対象の攻城予定がありません")
+            return None
+    else:
+        if dt in npc_attack_plans and 0 <= (idx-1) < len(npc_attack_plans[dt]):
+            removed = npc_attack_plans[dt].pop(idx-1)
+            # 値が空の日時全体を削除
+            if not npc_attack_plans[dt]:
+                del npc_attack_plans[dt]
+            save_all_data()
+            print(f"攻城予定を削除: {dt.strftime('%Y/%m/%d %H:%M')} - {removed['target']}")
+            return removed
+        else:
+            print(f"削除対象の攻城予定がありません")
+            return None
 
 #---代理投票辞書からの個別投票除外---
 def cancel_proxy_vote(guild_id, msg_id, voter, agent_id):
