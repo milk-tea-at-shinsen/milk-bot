@@ -1222,10 +1222,44 @@ async def milkbot_talk(message, wait_msg):
 #---------------
 # メール文面作成関係
 #---------------
-#=====攻城予定作成=====
-def make_attack_npc_mail():
-    print"[start: make_attack_npc_mail]"
-    
+#=====攻城予定メール作成=====
+def make_attack_npc_mail(guild_id):
+    print("[start: make_attack_npc_mail]")
+    npc_attack_plans = all_data[guild_id]["npc_attack_plans"]
+
+    if len(npc_attack_plans) == 0:
+        return "⚠️攻城予定は登録されていないよ"
+
+    lines = []
+    last_date = None
+    for dt, plan in sorted(npc_attack_plans.items()):
+        current_date = dt.date()
+
+        time_str = dt.strftime("%H:%M")
+        target = plan["target"]
+        main_force = plan["main_force"]
+        tank_unit = plan["tank_unit"]
+        comment = plan["comment"]
+        
+        body = (
+            f"【攻城時間】{time_str}\n"
+            f"【攻城先】{target}\n"
+            f"【殲滅】{main_force}\n"
+            f"【兵器】{tank_unit}\n"
+            f"【備考】{comment}"
+        )
+
+        if current_date != last_date:
+            date_str = dt.strftime("%m月%d日")
+            weekday = "月火水木金土日"[dt.weekday()]
+            line = (f"【{date_str}({weekday})】\n{body}")
+            last_date = current_date
+        else:
+            line = body
+
+        lines.append(line)
+
+    return "\n\n".join(lines)
 
 #===============
 # クラス定義
