@@ -646,16 +646,16 @@ def remove_tmp_file(filename: str):
 # リマインダー関係
 #---------------
 #=====リマインダー削除=====
-async def handle_remove_reminder(interaction, guild_id, dt, idx):
-        removed = remove_reminder(guild_id, dt, idx)
+# async def handle_remove_reminder(interaction, guild_id, dt, idx):
+#         removed = remove_reminder(guild_id, dt, idx)
 
-        # 削除完了メッセージの送信
-        await interaction.message.delete()
-        await interaction.followup.send(
-            content=f"リマインダーを削除したよ🫡: {dt.strftime('%Y/%m/%d %H:%M')} - {removed['msg']}",
-            allowed_mentions=discord.AllowedMentions.none(),
-            ephemeral=True
-        )
+#         # 削除完了メッセージの送信
+#         await interaction.message.delete()
+#         await interaction.followup.send(
+#             content=f"リマインダーを削除したよ🫡: {dt.strftime('%Y/%m/%d %H:%M')} - {removed['msg']}",
+#             allowed_mentions=discord.AllowedMentions.none(),
+#             ephemeral=True
+#         )
 
 #=====通知用ループ処理=====
 async def reminder_loop():
@@ -1282,7 +1282,7 @@ class ReminderSelect(View):
         #選択リストの定義
         options = []
         # リマインダー辞書から日時と項目を分離
-        for dt, values in reminders.items():
+        for dt, values in sorted(self.reminders.items()):
             # 同一日時内の項目区別用インデックスを作成
             for index, v in enumerate(values, start=1):
                 msg = v["msg"]
@@ -1312,7 +1312,15 @@ class ReminderSelect(View):
         idx = int(idx_str)
 
         # 予定の削除
-        await handle_remove_reminder(interaction, guild_id, dt, idx)
+        removed = remove_reminder(guild_id, dt, idx)
+
+        # 削除完了メッセージの送信
+        await interaction.message.delete()
+        await interaction.followup.send(
+            content=f"リマインダーを削除したよ🫡: {dt.strftime('%Y/%m/%d %H:%M')} - {removed['msg']}",
+            allowed_mentions=discord.AllowedMentions.none(),
+            ephemeral=True
+        )
 
 #---------------
 # 投票関係
@@ -1527,6 +1535,62 @@ class VoteSelectMode(Enum):
     ADD_OPTION = "add_option"
     DELETE_VOTE = "delete_vote"
 
+#---------------
+# 攻城予定関係
+#---------------
+#=====攻城予定選択=====
+class NpcAttackPlanSelect(View):
+    # クラスの初期設定
+    def __init__(self, guild_id, npc_attack_plans):
+        super().__init__()
+        # guild_idプロパティにサーバーidをセット
+        self.guild_id = guild_id
+        # npc_attack_plansプロパティに攻城予定辞書をセット
+        self.npc_attack_plans = npc_attack_plans
+        
+        #選択リストの定義
+        options = []
+        # 攻城予定辞書から日時と項目を分離
+        for dt, values in sorted(npc_attack_plans.items()):
+            # 同一日時内の項目区別用インデックスを作成
+            for index, v in enumerate(values, start=1):
+                target = v["target"]
+                # 選択肢に表示される項目を設定
+                label = f"{dt.strftime('%Y/%m/%d %H:%M')} - {target[:50]}"
+                # 選択時に格納される値を設定
+                value = f"{dt.isoformat()}|{index}"
+                # optionsリストに表示項目と値を格納
+                options.append(discord.SelectOption(label=label, value=value))
+        
+        #selectUIの定義
+        if options:
+            select = Select(
+                placeholder="攻城予定を選択",
+                options = options
+            )
+            select.callback = self.select_callback
+            self.add_item(select)
+    
+    # 削除処理の関数定義
+    async def select_callback(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
+        value = interaction.data["values"][0]
+        # 日時とインデックスを分離
+        dt_str, idx_str = value.split("|")
+        dt = datetime.fromisoformat(dt_str)
+        idx = int(idx_str)
+
+        # 予定の削除
+        removed = remove_npc_attack_plan(self.guild_id, dt, idx)
+
+        # 削除完了メッセージの送信
+        await interaction.message.delete()
+        await interaction.followup.send(
+            content=f"攻城予定を削除したよ🫡: {dt.strftime('%Y/%m/%d %H:%M')} - {removed['target']}",
+            allowed_mentions=discord.AllowedMentions.none(),
+            ephemeral=True
+        )
+
 #====================
 # イベントハンドラ
 #====================
@@ -1734,7 +1798,7 @@ async def reminder_delete(ctx: discord.ApplicationContext):
     # リマインダーが設定されている場合、選択メニューを表示
     if reminders:
         view = ReminderSelect(ctx.guild.id, reminders)
-        await ctx.interaction.response.send_message("削除するリマインダーを選んでね", view=view)
+        await ctx.interaction.response.send_message("削除するリマインダーを選んでね", view=view, ephemeral=True)
     # リマインダーが設定されていない場合のメッセージ
     else:
         await ctx.interaction.response.send_message("⚠️設定されているリマインダーがないよ", ephemeral=True)
@@ -1788,7 +1852,7 @@ async def vote_add_option(ctx: discord.ApplicationContext):
     votes = all_data[ctx.guild.id]["votes"]
     if votes:
         view = VoteSelect(guild_id=ctx.guild.id, mode=VoteSelectMode.ADD_OPTION, voter=None, agent_id=None)
-        await ctx.interaction.response.send_message("選択肢を追加する投票を選んでね", view=view)
+        await ctx.interaction.response.send_message("選択肢を追加する投票を選んでね", view=view, ephemeral=True)
     # 投票がない場合のメッセージ
     else:
         await ctx.interaction.response.send_message("⚠️実施中の投票がないよ", ephemeral=True)
@@ -1808,10 +1872,10 @@ async def vote_result(
     if votes:
         if mode == "mid":
             view = VoteSelect(guild_id=ctx.guild.id, mode=VoteSelectMode.MID_RESULT, voter=None, agent_id=None)
-            await ctx.interaction.response.send_message("どの投票結果を表示するか選んでね", view=view)
+            await ctx.interaction.response.send_message("どの投票結果を表示するか選んでね", view=view, ephemeral=True)
         elif mode == "final":
             view = VoteSelect(guild_id=ctx.guild.id, mode=VoteSelectMode.FINAL_RESULT, voter=None, agent_id=None)
-            await ctx.interaction.response.send_message("どの投票結果を表示するか選んでね", view=view)
+            await ctx.interaction.response.send_message("どの投票結果を表示するか選んでね", view=view, ephemeral=True)
         else:
             await ctx.interaction.response.send_message("⚠️選択モードの指定がまちがってるよ", ephemeral=True)
 
@@ -1826,7 +1890,7 @@ async def proxy_vote(ctx: discord.ApplicationContext, voter: str = discord.Optio
     if votes:
         agent_id = ctx.interaction.user.id
         view = VoteSelect(guild_id=ctx.guild.id, mode=VoteSelectMode.PROXY_VOTE, voter=voter, agent_id=agent_id)
-        await ctx.interaction.response.send_message("どの投票に代理投票するか選んでね", view=view)
+        await ctx.interaction.response.send_message("どの投票に代理投票するか選んでね", view=view, ephemeral=True)
     else:
         await ctx.interaction.response.send_message("⚠️代理投票できる投票がないよ", ephemeral=True)
 
@@ -1837,7 +1901,7 @@ async def cancel_proxy(ctx: discord.ApplicationContext, voter: str = discord.Opt
     if votes:
         agent_id = ctx.interaction.user.id
         view = VoteSelect(guild_id=ctx.guild.id, mode=VoteSelectMode.CANCEL_PROXY_VOTE, voter=voter, agent_id=agent_id)
-        await ctx.interaction.response.send_message("代理投票を取り消しする投票を選んでね", view=view)
+        await ctx.interaction.response.send_message("代理投票を取り消しする投票を選んでね", view=view, ephemeral=True)
     else:
         await ctx.interaction.response.send_message("⚠️取り消しできる投票がないよ", ephemeral=True)
 
@@ -2163,13 +2227,25 @@ async def npc_attack_mail(
 ):
     guild_id = ctx.guild.id
     npc_attack_plans = all_data[guild_id]["npc_attack_plans"]
-    status_msg = await ctx.respond(content=f"{bot.user.display_name}が考え中…🤔")
+    status_msg = await ctx.respond(content=f"{bot.user.display_name}が考え中…🤔", ephemeral=True)
 
     dt = datetime.strptime(f"{date} {time}", "%Y/%m/%d %H:%M").replace(tzinfo=JST)
     add_npc_attack_plan(guild_id, dt, target, main_force, tank_unit, comment)
     message = make_attack_npc_mail(guild_id)
 
     await status_msg.edit(content=message)
+
+#=====/npc_attack_delete コマンド=====
+@bot.slash_command(name="npc_attack_delete", description="攻城予定を削除するよ")
+async def npc_attack_delete(ctx: discord.ApplicationContext):
+    npc_attack_plans = all_data[ctx.guild.id]["npc_attack_plans"]
+    # 攻城予定が設定されている場合、選択メニューを表示
+    if npc_attack_plans:
+        view = NpcAttackPlanSelect(ctx.guild.id, npc_attack_plans)
+        await ctx.interaction.response.send_message("削除する攻城予定を選んでね", view=view, ephemeral=True)
+    # 攻城予定が設定されていない場合のメッセージ
+    else:
+        await ctx.interaction.response.send_message("⚠️設定されている攻城予定がないよ", ephemeral=True)
 
 # Botを起動
 bot.run(os.getenv("DISCORD_TOKEN"))
