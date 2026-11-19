@@ -99,6 +99,10 @@ try:
         for guild_id, guild_dict in all_data.items():
             # リマインダー辞書キーのdtをdatetime型に戻す
             all_data[guild_id]["reminders"] = {datetime.fromisoformat(key): value for key, value in guild_dict["reminders"].items()}
+            # 攻城予定辞書キーのdtをdatetime型に戻す
+            all_data[guild_id]["npc_attack_plans"] = {datetime.fromisoformat(key): value for key, value in guild_dict["npc_attack_plans"].items()}
+            # 作戦予定辞書キーのdtをdatetime型に戻す
+            all_data[guild_id]["operation_plans"] = {datetime.fromisoformat(key): value for key, value in guild_dict["operation_plans"].items()}
             # 投票辞書キーのmsg_idをint型に戻す
             all_data[guild_id]["votes"] = {int(key): value for key, value in guild_dict["votes"].items()}
             # 代理投票辞書キーのmsg_idをint型に戻す
@@ -170,7 +174,9 @@ def preset_dict(guild_id):
             "proxy_votes": {},
             "make_list_channels": [],
             "log_texts": {},
-            "ai_chat_channels": []
+            "ai_chat_channels": [],
+            "npc_attack_plans": {},
+            "operation_plans": {}
         }
         save_all_data()
 
@@ -186,6 +192,12 @@ def initialize_new_dict():
         # ai_chat_channelsリストがない場合は追加
         if "ai_chat_channels" not in all_data[guild_id]:
                 all_data[guild_id]["ai_chat_channels"] = []
+        # npc_attack_plans辞書がない場合は追加
+        if "npc_attack_plans" not in all_data[guild_id]:
+                all_data[guild_id]["npc_attack_plans"] = {}
+        # operation_plans辞書がない場合は追加
+        if "operation_plans" not in all_data[guild_id]:
+                all_data[guild_id]["operation_plans"] = {}
         print(f"all_data: {all_data}")
         
 #===============
@@ -231,6 +243,10 @@ def save_all_data():
 
         # reminders辞書のdatetime型をisoformatに直してから保存
         data_to_save[guild_id]["reminders"] = {dt.isoformat(): value for dt, value in guild_dict["reminders"].items()}
+        # npc_attack_plans辞書のdatetime型をisoformatに直してから保存
+        data_to_save[guild_id]["npc_attack_plans"] = {dt.isoformat(): value for dt, value in guild_dict["npc_attack_plans"].items()}
+        # operation_plans辞書のdatetime型をisoformatに直してから保存
+        data_to_save[guild_id]["operation_plans"] = {dt.isoformat(): value for dt, value in guild_dict["operation_plans"].items()}
         # log_texts辞書を空にしてから保存
         data_to_save[guild_id]["log_texts"] = {}
 
@@ -332,6 +348,22 @@ def add_log_text(guild_id, channel_id):
     if channel_id not in log_texts:
         log_texts[channel_id] = []
 
+#---攻城予定辞書---
+def add_npc_attack_plan(guild_id, dt, target, main_force, tank_unit, comment=None):
+    npc_attack_plans = all_data[guild_id]["npc_attack_plans"]
+    # 日時が辞書になければ辞書に行を追加
+    if dt not in npc_attack_plans:
+        npc_attack_plans[dt] = []
+    # 辞書に項目を登録
+    npc_attack_plans[dt].append(
+        {"target": target,
+         "main_force": main_force,
+         "tank_unit": tank_unit,
+         "comment": comment}
+    )
+    # json保存前処理
+    save_all_data()
+
 #=====辞書からの削除処理=====
 #---リマインダー辞書---
 def remove_reminder(guild_id, dt, idx=None):
@@ -431,6 +463,33 @@ def remove_log_text(guild_id, channel_id, channel_name):
     else:
         print(f"{channel_name}の録音セッションがありません")
         return
+
+#---攻城予定辞書---
+def remove_npc_attack_plan(guild_id, dt, idx=None):
+    npc_attack_plans = all_data[guild_id]["npc_attack_plans"]
+    # idxがNoneの場合は日時全体を削除、そうでなければ指定インデックスの行を削除
+    if idx is None:
+        if dt in npc_attack_plans:
+            removed = npc_attack_plans[dt]
+            del npc_attack_plans[dt]
+            save_all_data()
+            print(f"攻城予定を削除: {dt.strftime('%Y/%m/%d %H:%M')}")
+            return removed
+        else:
+            print(f"削除対象の攻城予定がありません")
+            return None
+    else:
+        if dt in npc_attack_plans and 0 <= (idx-1) < len(npc_attack_plans[dt]):
+            removed = npc_attack_plans[dt].pop(idx-1)
+            # 値が空の日時全体を削除
+            if not npc_attack_plans[dt]:
+                del npc_attack_plans[dt]
+            save_all_data()
+            print(f"攻城予定を削除: {dt.strftime('%Y/%m/%d %H:%M')} - {removed['target']}")
+            return removed
+        else:
+            print(f"削除対象の攻城予定がありません")
+            return None
 
 #---代理投票辞書からの個別投票除外---
 def cancel_proxy_vote(guild_id, msg_id, voter, agent_id):
@@ -587,19 +646,19 @@ def remove_tmp_file(filename: str):
 # リマインダー関係
 #---------------
 #=====リマインダー削除=====
-async def handle_remove_reminder(interaction, guild_id, dt, idx):
-        removed = remove_reminder(guild_id, dt, idx)
+# async def handle_remove_reminder(interaction, guild_id, dt, idx):
+#         removed = remove_reminder(guild_id, dt, idx)
 
-        # 削除完了メッセージの送信
-        await interaction.message.delete()
-        await interaction.followup.send(
-            content=f"リマインダーを削除したよ🫡: {dt.strftime('%Y/%m/%d %H:%M')} - {removed['msg']}",
-            allowed_mentions=discord.AllowedMentions.none(),
-            ephemeral=True
-        )
+#         # 削除完了メッセージの送信
+#         await interaction.message.delete()
+#         await interaction.followup.send(
+#             content=f"リマインダーを削除したよ🫡: {dt.strftime('%Y/%m/%d %H:%M')} - {removed['msg']}",
+#             allowed_mentions=discord.AllowedMentions.none(),
+#             ephemeral=True
+#         )
 
 #=====通知用ループ処理=====
-async def reminder_loop():
+async def per_minute_loop():
     await bot.wait_until_ready()
     while not bot.is_closed():
         # 現在時刻を取得して次のゼロ秒までsleep
@@ -609,6 +668,7 @@ async def reminder_loop():
         await asyncio.sleep(wait)
 
         for guild_id in all_data:
+            # リマインダーの実行
             reminders = all_data[guild_id]["reminders"]
             # 辞書に該当時刻が登録されていた場合
             if next_minute in reminders:
@@ -637,6 +697,21 @@ async def reminder_loop():
                 
                 # 処理済の予定の削除
                 remove_reminder(guild_id, next_minute)
+
+            # 攻城予定の削除
+            npc_attack_plans = all_data[guild_id]["npc_attack_plans"]
+            # 辞書に該当時刻が登録されていた場合
+            if next_minute in npc_attack_plans:
+                # 該当行を取り出してラベル付きリストに代入し値を取り出す
+                for plan_dt in npc_attack_plans[next_minute]:
+                    target = plan_dt["target"]
+                    main_force = plan_dt["main_force"]
+                    tank_unit = plan_dt["tank_unit"]
+                    comment = plan_dt.get("comment", "")
+                    print(f"攻城予定時刻到達: {datetime.now(JST)} - {target} - {main_force} - {tank_unit} - {comment}")
+                
+                # 処理済の予定の削除
+                remove_npc_attack_plan(guild_id, next_minute)
 
 #---------------
 # 投票関係
@@ -778,13 +853,17 @@ async def show_vote_result(interaction, dt, result, msg_id, mode):
         mode_str = "集計日時"
     embed.set_footer(text=f"{mode_str} - {dt.strftime('%Y/%m/%d %H:%M')}")
     # embedを表示
+    
     if interaction.message:
-        await interaction.message.edit(
-            content=None,
-            embed=embed,
-            allowed_mentions=discord.AllowedMentions.none(),
+        await interaction.response.edit_message(
+            content="投票結果を集計したよ🫡",
             view=None
         )
+        await interaction.channel.send(
+            embed=embed,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
     else:
         await interaction.followup.send(
             content=None,
@@ -860,7 +939,7 @@ async def export_vote_csv(interaction, result, msg_id, dt, mode):
     make_csv(listed_file, rows, meta, header)
     
     # discordに送信
-    await interaction.followup.send(
+    await interaction.channel.send(
         content="投票集計結果のCSVだよ🫡",
         files=[discord.File(grouped_file), discord.File(listed_file)]
     )
@@ -1160,6 +1239,50 @@ async def milkbot_talk(message, wait_msg):
     finally:
         log_texts[channel.id] = {}
 
+#---------------
+# メール文面作成関係
+#---------------
+#=====攻城予定メール作成=====
+def make_attack_npc_mail(guild_id):
+    print("[start: make_attack_npc_mail]")
+    npc_attack_plans = all_data[guild_id]["npc_attack_plans"]
+
+    if len(npc_attack_plans) == 0:
+        return "⚠️攻城予定は登録されていないよ"
+
+    lines = []
+    last_date = None
+    for dt, plans in sorted(npc_attack_plans.items()):
+        current_date = dt.date()
+        time_str = dt.strftime("%H:%M")
+            
+        for plan in plans:
+            target = plan["target"]
+            main_force = plan["main_force"]
+            tank_unit = plan["tank_unit"]
+            comment = plan["comment"]
+            
+            body = (
+                f"【攻城時間】{time_str}\\n"
+                f"【攻城先】{target}\\n"
+                f"【殲滅】{main_force}\\n"
+                f"【兵器】{tank_unit}"
+            )
+            if comment:
+                body += f"\\n【備考】{comment}"
+
+            if current_date != last_date:
+                date_str = dt.strftime("%m月%d日")
+                weekday = "月火水木金土日"[dt.weekday()]
+                line = (f"{date_str}({weekday})\\n{body}")
+                last_date = current_date
+            else:
+                line = body
+
+            lines.append(line)
+
+    return "\\n\\n".join(lines)
+
 #===============
 # クラス定義
 #===============
@@ -1179,7 +1302,7 @@ class ReminderSelect(View):
         #選択リストの定義
         options = []
         # リマインダー辞書から日時と項目を分離
-        for dt, values in reminders.items():
+        for dt, values in sorted(self.reminders.items()):
             # 同一日時内の項目区別用インデックスを作成
             for index, v in enumerate(values, start=1):
                 msg = v["msg"]
@@ -1201,7 +1324,6 @@ class ReminderSelect(View):
     
     # 削除処理の関数定義
     async def select_callback(self, interaction: discord.Interaction):
-        await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
         value = interaction.data["values"][0]
         # 日時とインデックスを分離
         dt_str, idx_str = value.split("|")
@@ -1209,7 +1331,14 @@ class ReminderSelect(View):
         idx = int(idx_str)
 
         # 予定の削除
-        await handle_remove_reminder(interaction, guild_id, dt, idx)
+        removed = remove_reminder(self.guild_id, dt, idx)
+
+        # 削除完了メッセージの送信
+        await interaction.response.edit_message(
+            content=f"リマインダーを削除したよ🫡: {dt.strftime('%Y/%m/%d %H:%M')} - {removed['msg']}",
+            allowed_mentions=discord.AllowedMentions.none(),
+            view=None
+        )
 
 #---------------
 # 投票関係
@@ -1257,36 +1386,29 @@ class VoteSelect(View):
 
         # 代理投票
         if self.mode == VoteSelectMode.PROXY_VOTE:
-            await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
             view = VoteOptionSelect(self.guild_id, msg_id, self.voter, self.agent_id)
-            await interaction.message.edit(content="代理投票する選択肢を選んでね", view=view)
+            await interaction.response.edit_message(content="代理投票する選択肢を選んでね", view=view)
         # 代理投票キャンセル
         elif self.mode == VoteSelectMode.CANCEL_PROXY_VOTE:
             removed = cancel_proxy_vote(self.guild_id, msg_id, self.voter, self.agent_id)
-            await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
             if removed:
-                await interaction.message.edit(content=f"**{self.voter}** の分の代理投票を取り消したよ🫡")
+                await interaction.response.edit_message(content=f"**{self.voter}** の分の代理投票を取り消したよ🫡", view=None)
             else:
-                await interaction.message.delete()
-                await interaction.followup.send(content=f"⚠️取り消せる代理投票がないよ", ephemeral=True)
+                await interaction.response.edit_message(content=f"⚠️取り消せる代理投票がないよ", view=None)
         # 投票選択肢追加
         elif self.mode == VoteSelectMode.ADD_OPTION:
             lim = min(5, 10 - len(votes[msg_id]["options"]))
             if lim == 0:
-                await interaction.message.delete()
-                await interaction.followup.send(content="️⚠️これ以上選択肢を増やせないよ", view=None, ephemeral=True)
+                await interaction.response.edit_message(content="️⚠️これ以上選択肢を増やせないよ", view=None)
                 return
             await interaction.response.send_modal(AddOptionInput(self.guild_id, msg_id, lim))
         # 削除
         elif self.mode == VoteSelectMode.DELETE_VOTE:
-            await interaction.response.defer()
             remove_vote(self.guild_id, msg_id)
             remove_proxy_vote(self.guild_id, msg_id)
-            await interaction.message.delete()
-            await interaction.followup.send(content="投票を削除したよ🫡", ephemeral=True)
+            await interaction.response.edit_message(content="投票を削除したよ🫡", view=None)
         # 集計
         else:
-            await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
             dt, result = await make_vote_result(interaction, msg_id)
 
             # 結果表示処理
@@ -1346,7 +1468,6 @@ class VoteOptionSelect(View):
 
     # 選択肢選択後の関数定義
     async def select_callback(self, interaction: discord.Interaction):
-        await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
         guild = interaction.guild
         
         opt_idx = [int(opt_str) for opt_str in interaction.data["values"]]
@@ -1354,7 +1475,7 @@ class VoteOptionSelect(View):
         add_proxy_vote(self.guild_id, self.msg_id, self.voter, self.agent_id, opt_idx)
         agent = guild.get_member(self.agent_id)
         agent_display_name = agent.nick or agent.display_name or agent.name
-        await interaction.message.edit(content=f"**{agent_display_name}** から **{self.voter}** の分の投票を受け付けたよ🫡")
+        await interaction.response.edit_message(content=f"**{agent_display_name}** から **{self.voter}** の分の投票を受け付けたよ🫡")
 
 #=====追加選択肢入力=====
 class AddOptionInput(discord.ui.Modal):
@@ -1382,8 +1503,8 @@ class AddOptionInput(discord.ui.Modal):
     async def callback(self, interaction: discord.Interaction):
         print("[start: on submit]")
         votes = all_data[self.guild_id]["votes"]
-        await interaction.response.defer()
-        await interaction.message.edit(content=f"{bot.user.display_name}が考え中…🤔", view=None)
+        await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
+
         # 追加選択肢をリスト化
         add_options = [add_opt.value for add_opt in self.inputs if add_opt.value.strip()]
         # 辞書の内容を取得
@@ -1410,7 +1531,7 @@ class AddOptionInput(discord.ui.Modal):
         for i in range(len(add_options)):
             await message.add_reaction(add_reactions[i])
         
-        await interaction.message.edit(content=f"投票に選択肢を追加したよ🫡\n{message.jump_url}")
+        await interaction.edit_original_response(content=f"投票に選択肢を追加したよ🫡\n{message.jump_url}", view=None)
 
         # 辞書の更新
         add_vote(self.guild_id, self.msg_id, question, reactions, options)
@@ -1423,6 +1544,60 @@ class VoteSelectMode(Enum):
     CANCEL_PROXY_VOTE = "cancel_proxy_vote"
     ADD_OPTION = "add_option"
     DELETE_VOTE = "delete_vote"
+
+#---------------
+# 攻城予定関係
+#---------------
+#=====攻城予定選択=====
+class NpcAttackPlanSelect(View):
+    # クラスの初期設定
+    def __init__(self, guild_id, npc_attack_plans):
+        super().__init__()
+        # guild_idプロパティにサーバーidをセット
+        self.guild_id = guild_id
+        # npc_attack_plansプロパティに攻城予定辞書をセット
+        self.npc_attack_plans = npc_attack_plans
+        
+        #選択リストの定義
+        options = []
+        # 攻城予定辞書から日時と項目を分離
+        for dt, values in sorted(npc_attack_plans.items()):
+            # 同一日時内の項目区別用インデックスを作成
+            for index, v in enumerate(values, start=1):
+                target = v["target"]
+                # 選択肢に表示される項目を設定
+                label = f"{dt.strftime('%Y/%m/%d %H:%M')} - {target[:50]}"
+                # 選択時に格納される値を設定
+                value = f"{dt.isoformat()}|{index}"
+                # optionsリストに表示項目と値を格納
+                options.append(discord.SelectOption(label=label, value=value))
+        
+        #selectUIの定義
+        if options:
+            select = Select(
+                placeholder="攻城予定を選択",
+                options = options
+            )
+            select.callback = self.select_callback
+            self.add_item(select)
+    
+    # 削除処理の関数定義
+    async def select_callback(self, interaction: discord.Interaction):
+        value = interaction.data["values"][0]
+        # 日時とインデックスを分離
+        dt_str, idx_str = value.split("|")
+        dt = datetime.fromisoformat(dt_str)
+        idx = int(idx_str)
+
+        # 予定の削除
+        removed = remove_npc_attack_plan(self.guild_id, dt, idx)
+
+        # 削除完了メッセージの送信
+        await interaction.response.edit_message(
+            content=f"攻城予定を削除したよ🫡: {dt.strftime('%Y/%m/%d %H:%M')} - {removed['target']}",
+            allowed_mentions=discord.AllowedMentions.none(),
+            view=None
+        )
 
 #====================
 # イベントハンドラ
@@ -1441,7 +1616,7 @@ async def on_ready():
     
     # リマインダーループの開始
     print(f"[start loop: {datetime.now(JST)}]")
-    bot.loop.create_task(reminder_loop())
+    bot.loop.create_task(per_minute_loop())
 
 # 新規サーバー導入時処理
 @bot.event
@@ -1631,7 +1806,7 @@ async def reminder_delete(ctx: discord.ApplicationContext):
     # リマインダーが設定されている場合、選択メニューを表示
     if reminders:
         view = ReminderSelect(ctx.guild.id, reminders)
-        await ctx.interaction.response.send_message("削除するリマインダーを選んでね", view=view)
+        await ctx.interaction.response.send_message("削除するリマインダーを選んでね", ephemeral=True, view=view)
     # リマインダーが設定されていない場合のメッセージ
     else:
         await ctx.interaction.response.send_message("⚠️設定されているリマインダーがないよ", ephemeral=True)
@@ -1685,7 +1860,7 @@ async def vote_add_option(ctx: discord.ApplicationContext):
     votes = all_data[ctx.guild.id]["votes"]
     if votes:
         view = VoteSelect(guild_id=ctx.guild.id, mode=VoteSelectMode.ADD_OPTION, voter=None, agent_id=None)
-        await ctx.interaction.response.send_message("選択肢を追加する投票を選んでね", view=view)
+        await ctx.interaction.response.send_message("選択肢を追加する投票を選んでね", ephemeral=True, view=view)
     # 投票がない場合のメッセージ
     else:
         await ctx.interaction.response.send_message("⚠️実施中の投票がないよ", ephemeral=True)
@@ -1705,10 +1880,10 @@ async def vote_result(
     if votes:
         if mode == "mid":
             view = VoteSelect(guild_id=ctx.guild.id, mode=VoteSelectMode.MID_RESULT, voter=None, agent_id=None)
-            await ctx.interaction.response.send_message("どの投票結果を表示するか選んでね", view=view)
+            await ctx.interaction.response.send_message("どの投票結果を表示するか選んでね", ephemeral=True, view=view)
         elif mode == "final":
             view = VoteSelect(guild_id=ctx.guild.id, mode=VoteSelectMode.FINAL_RESULT, voter=None, agent_id=None)
-            await ctx.interaction.response.send_message("どの投票結果を表示するか選んでね", view=view)
+            await ctx.interaction.response.send_message("どの投票結果を表示するか選んでね", ephemeral=True, view=view)
         else:
             await ctx.interaction.response.send_message("⚠️選択モードの指定がまちがってるよ", ephemeral=True)
 
@@ -1723,7 +1898,7 @@ async def proxy_vote(ctx: discord.ApplicationContext, voter: str = discord.Optio
     if votes:
         agent_id = ctx.interaction.user.id
         view = VoteSelect(guild_id=ctx.guild.id, mode=VoteSelectMode.PROXY_VOTE, voter=voter, agent_id=agent_id)
-        await ctx.interaction.response.send_message("どの投票に代理投票するか選んでね", view=view)
+        await ctx.interaction.response.send_message("どの投票に代理投票するか選んでね", ephemeral=True, view=view)
     else:
         await ctx.interaction.response.send_message("⚠️代理投票できる投票がないよ", ephemeral=True)
 
@@ -1734,7 +1909,7 @@ async def cancel_proxy(ctx: discord.ApplicationContext, voter: str = discord.Opt
     if votes:
         agent_id = ctx.interaction.user.id
         view = VoteSelect(guild_id=ctx.guild.id, mode=VoteSelectMode.CANCEL_PROXY_VOTE, voter=voter, agent_id=agent_id)
-        await ctx.interaction.response.send_message("代理投票を取り消しする投票を選んでね", view=view)
+        await ctx.interaction.response.send_message("代理投票を取り消しする投票を選んでね", ephemeral=True, view=view)
     else:
         await ctx.interaction.response.send_message("⚠️取り消しできる投票がないよ", ephemeral=True)
 
@@ -2042,6 +2217,44 @@ async def remove_aichat_ch(ctx):
     else:
         await ctx.message.delete()
         await ctx.send(content=f"⚠️{channel_name}はみるぼとお話してないよ")
+
+#---------------
+# メール文面作成関係
+#---------------
+#=====/npc_attack_mail コマンド=====
+@bot.slash_command(name="npc_attack_mail", description="攻城予定メールの文面を作成するよ")
+@clean_slash_options
+async def npc_attack_mail(
+    ctx: discord.ApplicationContext,
+    date: discord.Option(str, description="日付"),
+    time: discord.Option(str, description="時間"),
+    target: discord.Option(str, description="攻城先"),
+    main_force: discord.Option(str, description="殲滅"),
+    tank_unit: discord.Option(str, description="兵器"),
+    comment: discord.Option(str, description="備考", default=None)
+):
+    guild_id = ctx.guild.id
+    npc_attack_plans = all_data[guild_id]["npc_attack_plans"]
+    status_msg = await ctx.respond(content=f"{bot.user.display_name}が考え中…🤔", ephemeral=True)
+
+    dt = datetime.strptime(f"{date} {time}", "%Y/%m/%d %H:%M").replace(tzinfo=JST)
+    add_npc_attack_plan(guild_id, dt, target, main_force, tank_unit, comment)
+    message = make_attack_npc_mail(guild_id)
+
+    await ctx.interaction.delete_original_response()
+    await ctx.interaction.channel.send(content=message)
+
+#=====/npc_attack_delete コマンド=====
+@bot.slash_command(name="npc_attack_delete", description="攻城予定を削除するよ")
+async def npc_attack_delete(ctx: discord.ApplicationContext):
+    npc_attack_plans = all_data[ctx.guild.id]["npc_attack_plans"]
+    # 攻城予定が設定されている場合、選択メニューを表示
+    if npc_attack_plans:
+        view = NpcAttackPlanSelect(ctx.guild.id, npc_attack_plans)
+        await ctx.interaction.response.send_message("削除する攻城予定を選んでね", ephemeral=True, view=view)
+    # 攻城予定が設定されていない場合のメッセージ
+    else:
+        await ctx.interaction.response.send_message("⚠️設定されている攻城予定がないよ", ephemeral=True)
 
 # Botを起動
 bot.run(os.getenv("DISCORD_TOKEN"))
