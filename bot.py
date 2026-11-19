@@ -843,7 +843,7 @@ async def show_vote_result(interaction, dt, result, msg_id, mode):
             content="投票結果を集計したよ🫡",
             view=None
         )
-        await interaction.followup.send(
+        await interaction.channel.send(
             embed=embed,
             allowed_mentions=discord.AllowedMentions.none(),
         )
@@ -923,7 +923,7 @@ async def export_vote_csv(interaction, result, msg_id, dt, mode):
     make_csv(listed_file, rows, meta, header)
     
     # discordに送信
-    await interaction.followup.send(
+    await interaction.channel.send(
         content="投票集計結果のCSVだよ🫡",
         files=[discord.File(grouped_file), discord.File(listed_file)]
     )
