@@ -1487,7 +1487,7 @@ class AddOptionInput(discord.ui.Modal):
     async def callback(self, interaction: discord.Interaction):
         print("[start: on submit]")
         votes = all_data[self.guild_id]["votes"]
-        await interaction.response.edit_message(content="選択肢を追加中だよ🫡", view=None)
+        await interaction.response.edit_message(content=f"{bot.user.display_name}が考え中…🤔", view=None)
 
         # 追加選択肢をリスト化
         add_options = [add_opt.value for add_opt in self.inputs if add_opt.value.strip()]
@@ -1515,7 +1515,7 @@ class AddOptionInput(discord.ui.Modal):
         for i in range(len(add_options)):
             await message.add_reaction(add_reactions[i])
         
-        await interaction.response.edit_original_response(content=f"投票に選択肢を追加したよ🫡\n{message.jump_url}", view=None)
+        await interaction.edit_original_response(content=f"投票に選択肢を追加したよ🫡\n{message.jump_url}", view=None)
 
         # 辞書の更新
         add_vote(self.guild_id, self.msg_id, question, reactions, options)
