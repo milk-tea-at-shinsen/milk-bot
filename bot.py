@@ -840,7 +840,7 @@ async def show_vote_result(interaction, dt, result, msg_id, mode):
     
     if interaction.message:
         await interaction.response.edit_message(
-            content=None,
+            content="投票結果を集計したよ🫡",
             view=None
         )
         await interaction.followup.send(
