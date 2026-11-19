@@ -1232,32 +1232,33 @@ def make_attack_npc_mail(guild_id):
 
     lines = []
     last_date = None
-    for dt, plan in sorted(npc_attack_plans.items()):
+    for dt, plans in sorted(npc_attack_plans.items()):
         current_date = dt.date()
-
         time_str = dt.strftime("%H:%M")
-        target = plan["target"]
-        main_force = plan["main_force"]
-        tank_unit = plan["tank_unit"]
-        comment = plan["comment"]
-        
-        body = (
-            f"【攻城時間】{time_str}\n"
-            f"【攻城先】{target}\n"
-            f"【殲滅】{main_force}\n"
-            f"【兵器】{tank_unit}\n"
-            f"【備考】{comment}"
-        )
+            
+        for plan in plans:
+            target = plan["target"]
+            main_force = plan["main_force"]
+            tank_unit = plan["tank_unit"]
+            comment = plan["comment"]
+            
+            body = (
+                f"【攻城時間】{time_str}\n"
+                f"【攻城先】{target}\n"
+                f"【殲滅】{main_force}\n"
+                f"【兵器】{tank_unit}\n"
+                f"【備考】{comment}"
+            )
 
-        if current_date != last_date:
-            date_str = dt.strftime("%m月%d日")
-            weekday = "月火水木金土日"[dt.weekday()]
-            line = (f"【{date_str}({weekday})】\n{body}")
-            last_date = current_date
-        else:
-            line = body
+            if current_date != last_date:
+                date_str = dt.strftime("%m月%d日")
+                weekday = "月火水木金土日"[dt.weekday()]
+                line = (f"【{date_str}({weekday})】\n{body}")
+                last_date = current_date
+            else:
+                line = body
 
-        lines.append(line)
+            lines.append(line)
 
     return "\n\n".join(lines)
 
@@ -2143,6 +2144,31 @@ async def remove_aichat_ch(ctx):
     else:
         await ctx.message.delete()
         await ctx.send(content=f"⚠️{channel_name}はみるぼとお話してないよ")
+
+#---------------
+# メール文面作成関係
+#---------------
+#=====/npc_attack_mail コマンド=====
+@bot.slash_command(name="npc_attack_mail", description="攻城予定メールの文面を作成するよ🫡")
+@clean_slash_options
+async def npc_attack_mail(
+    ctx: discord.ApplicationContext,
+    date: discord.Option(str, description="日付"),
+    time: discord.Option(str, description="時間"),
+    target: discord.Option(str, description="攻城先"),
+    main_force: discord.Option(str, description="殲滅"),
+    tank_unit: discord.Option(str, description="兵器"),
+    comment: discord.Option(str, description="備考")
+):
+    guild_id = ctx.guild.id
+    npc_attack_plans = all_data[guild_id]["npc_attack_plans"]
+    status_msg = await ctx.respond(content=f"{bot.user.display_name}が考え中…🤔")
+
+    dt = datetime.strptime(f"{date} {time}", "%Y/%m/%d %H:%M").replace
+    add_npc_attack_plan(guild_id, dt, target, main_force, tank_unit, comment)
+    message = make_attack_npc_mail(guild_id)
+
+    await status_msg.edit(content=message)
 
 # Botを起動
 bot.run(os.getenv("DISCORD_TOKEN"))
