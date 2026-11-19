@@ -2242,7 +2242,7 @@ async def npc_attack_mail(
     message = make_attack_npc_mail(guild_id)
 
     await ctx.interaction.delete_original_response()
-    await ctx.interaction.followup.send(content=message)
+    await ctx.interaction.channel.send(content=message)
 
 #=====/npc_attack_delete コマンド=====
 @bot.slash_command(name="npc_attack_delete", description="攻城予定を削除するよ")
