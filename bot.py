@@ -1487,7 +1487,7 @@ class AddOptionInput(discord.ui.Modal):
     async def callback(self, interaction: discord.Interaction):
         print("[start: on submit]")
         votes = all_data[self.guild_id]["votes"]
-        await interaction.response.edit_message(content=None, view=None)
+        await interaction.response.edit_message(content="選択肢を追加中だよ🫡", view=None)
 
         # 追加選択肢をリスト化
         add_options = [add_opt.value for add_opt in self.inputs if add_opt.value.strip()]
