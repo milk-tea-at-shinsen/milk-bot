@@ -1598,6 +1598,10 @@ class NpcAttackPlanSelect(View):
             allowed_mentions=discord.AllowedMentions.none(),
             view=None
         )
+        message = make_attack_npc_mail(guild_id)
+        await interaction.channel.send(
+            content=message
+        )
 
 #====================
 # イベントハンドラ
