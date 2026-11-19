@@ -2164,7 +2164,7 @@ async def npc_attack_mail(
     npc_attack_plans = all_data[guild_id]["npc_attack_plans"]
     status_msg = await ctx.respond(content=f"{bot.user.display_name}が考え中…🤔")
 
-    dt = datetime.strptime(f"{date} {time}", "%Y/%m/%d %H:%M").replace
+    dt = datetime.strptime(f"{date} {time}", "%Y/%m/%d %H:%M").replace(tzinfo=JST)
     add_npc_attack_plan(guild_id, dt, target, main_force, tank_unit, comment)
     message = make_attack_npc_mail(guild_id)
 
