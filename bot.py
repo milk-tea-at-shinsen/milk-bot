@@ -2206,7 +2206,7 @@ async def remove_aichat_ch(ctx):
 # メール文面作成関係
 #---------------
 #=====/npc_attack_mail コマンド=====
-@bot.slash_command(name="npc_attack_mail", description="攻城予定メールの文面を作成するよ🫡")
+@bot.slash_command(name="npc_attack_mail", description="攻城予定メールの文面を作成するよ")
 @clean_slash_options
 async def npc_attack_mail(
     ctx: discord.ApplicationContext,
@@ -2225,7 +2225,8 @@ async def npc_attack_mail(
     add_npc_attack_plan(guild_id, dt, target, main_force, tank_unit, comment)
     message = make_attack_npc_mail(guild_id)
 
-    await status_msg.edit(content=message)
+    await status_msg.edit(content="攻城予定メールを作成したよ🫡")
+    await ctx.interaction.response.send_message(content=f"{message}")
 
 #=====/npc_attack_delete コマンド=====
 @bot.slash_command(name="npc_attack_delete", description="攻城予定を削除するよ")
