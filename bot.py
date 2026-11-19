@@ -349,7 +349,7 @@ def add_log_text(guild_id, channel_id):
         log_texts[channel_id] = []
 
 #---攻城予定辞書---
-def add_npc_attack_plan(guild_id, dt, target, main_force, tank_unit, comment):
+def add_npc_attack_plan(guild_id, dt, target, main_force, tank_unit, comment=None):
     npc_attack_plans = all_data[guild_id]["npc_attack_plans"]
     # 日時が辞書になければ辞書に行を追加
     if dt not in npc_attack_plans:
@@ -1243,24 +1243,25 @@ def make_attack_npc_mail(guild_id):
             comment = plan["comment"]
             
             body = (
-                f"【攻城時間】{time_str}\n"
-                f"【攻城先】{target}\n"
-                f"【殲滅】{main_force}\n"
-                f"【兵器】{tank_unit}\n"
-                f"【備考】{comment}"
+                f"【攻城時間】{time_str}\\n"
+                f"【攻城先】{target}\\n"
+                f"【殲滅】{main_force}\\n"
+                f"【兵器】{tank_unit}"
             )
+            if comment:
+                body += f"\\n【備考】{comment}"
 
             if current_date != last_date:
                 date_str = dt.strftime("%m月%d日")
                 weekday = "月火水木金土日"[dt.weekday()]
-                line = (f"【{date_str}({weekday})】\n{body}")
+                line = (f"{date_str}({weekday})\\n{body}")
                 last_date = current_date
             else:
                 line = body
 
             lines.append(line)
 
-    return "\n\n".join(lines)
+    return "\\n\\n".join(lines)
 
 #===============
 # クラス定義
@@ -2158,7 +2159,7 @@ async def npc_attack_mail(
     target: discord.Option(str, description="攻城先"),
     main_force: discord.Option(str, description="殲滅"),
     tank_unit: discord.Option(str, description="兵器"),
-    comment: discord.Option(str, description="備考")
+    comment: discord.Option(str, description="備考", default=None)
 ):
     guild_id = ctx.guild.id
     npc_attack_plans = all_data[guild_id]["npc_attack_plans"]
