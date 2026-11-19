@@ -658,7 +658,7 @@ def remove_tmp_file(filename: str):
 #         )
 
 #=====通知用ループ処理=====
-async def reminder_loop():
+async def per_minute_loop():
     await bot.wait_until_ready()
     while not bot.is_closed():
         # 現在時刻を取得して次のゼロ秒までsleep
@@ -668,6 +668,7 @@ async def reminder_loop():
         await asyncio.sleep(wait)
 
         for guild_id in all_data:
+            # リマインダーの実行
             reminders = all_data[guild_id]["reminders"]
             # 辞書に該当時刻が登録されていた場合
             if next_minute in reminders:
@@ -696,6 +697,21 @@ async def reminder_loop():
                 
                 # 処理済の予定の削除
                 remove_reminder(guild_id, next_minute)
+
+            # 攻城予定の削除
+            npc_attack_plans = all_data[guild_id]["npc_attack_plans"]
+            # 辞書に該当時刻が登録されていた場合
+            if next_minute in npc_attack_plans:
+                # 該当行を取り出してラベル付きリストに代入し値を取り出す
+                for plan_dt in npc_attack_plans[next_minute]:
+                    target = plan_dt["target"]
+                    main_force = plan_dt["main_force"]
+                    tank_unit = plan_dt["tank_unit"]
+                    comment = plan_dt.get("comment", "")
+                    print(f"攻城予定時刻到達: {datetime.now(JST)} - {target} - {main_force} - {tank_unit} - {comment}")
+                
+                # 処理済の予定の削除
+                remove_npc_attack_plan(guild_id, next_minute)
 
 #---------------
 # 投票関係
@@ -1600,7 +1616,7 @@ async def on_ready():
     
     # リマインダーループの開始
     print(f"[start loop: {datetime.now(JST)}]")
-    bot.loop.create_task(reminder_loop())
+    bot.loop.create_task(per_minute_loop())
 
 # 新規サーバー導入時処理
 @bot.event
