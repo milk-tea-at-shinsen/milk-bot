@@ -2225,8 +2225,8 @@ async def npc_attack_mail(
     add_npc_attack_plan(guild_id, dt, target, main_force, tank_unit, comment)
     message = make_attack_npc_mail(guild_id)
 
-    await status_msg.edit(content=None)
-    await ctx.interaction.followup.send(content=f"{message}")
+    await ctx.interaction.delete_original_response()
+    await ctx.interaction.followup.send(content=message)
 
 #=====/npc_attack_delete コマンド=====
 @bot.slash_command(name="npc_attack_delete", description="攻城予定を削除するよ")
