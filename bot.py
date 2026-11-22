@@ -1134,17 +1134,40 @@ async def handle_make_list(message):
 #---------------
 # 会議ログ作成関係
 #---------------
-#=====vcログ作成=====
-def write_chat_log(guild_id, channel_id):
-    logs = all_data[guild_id]["log_texts"].get(channel_id, [])
-    if not logs:
+#=====会議録作成=====
+def make_meeting_log(events, channel_id):
+    # イベントが空ならNoneを返す
+    if not events:
         return None
-    logs.sort(key=lambda item: item["time"])
-    start_time = logs[0]["time"]
-    filename = f"./tmp/chat_log_{channel_id}_{start_time.astimezone(JST).strftime('%Y%m%d_%H%M%S')}.csv"
-    make_csv(filename, [[item["time"].astimezone(JST).strftime("%Y/%m/%d %H:%M:%S"), item["name"], item["text"]] for item in logs], {"title": "chat_log", "logged_at": start_time.astimezone(JST).strftime("%Y/%m/%d %H:%M")}, ["time", "name", "text"])
+    
+    # イベントを時系列でソート
+    sorted_events = sorted(events, key=lambda item: item["time"])
+
+    # 
+    start_time = sorted_events[0]["time"]
+    filename = f"./tmp/meeting_log_{channel_id}_{start_time.astimezone(JST).strftime('%Y%m%d_%H%M%S')}.csv"
+    make_csv(
+        filename,
+        [
+            [
+                item["time"].astimezone(JST).strftime("%Y/%m/%d %H:%M:%S"),
+                item["name"],
+                item["text"]
+            ]
+            for item in sorted_events
+        ],
+        {
+            "title": "chat_log",
+            "logged_at": start_time.astimezone(JST).strftime("%Y/%m/%d %H:%M")
+        },
+        ["time", "name", "text"]
+    )
     return filename
 
+#---------------
+# AIチャット関係
+#---------------
+#=====AIチャットトーク=====
 async def milkbot_talk(message, wait_msg):
     guild_id = message.guild.id
     channel = message.channel
@@ -2110,8 +2133,6 @@ async def make_log(
     ctx: discord.ApplicationContext,
     minutes: discord.Option(str, description="指定時間(分)", default=None)
 ):
-    guild_id = ctx.guild.id
-    log_texts = all_data[guild_id]["log_texts"]
     status_msg = await ctx.respond(content=f"{bot.user.display_name}が考え中…🤔")
 
     # minutesの指定がなければ30分に設定
@@ -2122,17 +2143,16 @@ async def make_log(
     messages = await collect_message(channel=channel, minutes=minutes, counts=None)
 
     # メッセージをログに記録
-    add_log_text(guild_id, channel.id)
-    log_texts[channel.id] = []
+    events = []
     for message in messages:
-        log_texts[channel.id].append({
+        events.append({
             "time": message.created_at,
             "name": message.author.nick or message.author.display_name or message.author.name,
             "text": message.content.strip()
         })
 
     # ログをcsv化して保存
-    filename = write_chat_log(guild_id, channel.id)
+    filename = make_meeting_log(events, channel.id)
     text = make_gemini_text(guild_id, channel.id)
     prompt = f"""
 以下は、Discordのボイスチャット会議のログです。
