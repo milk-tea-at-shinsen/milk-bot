@@ -664,12 +664,18 @@ async def collect_message(channel, counts=None, minutes=None):
     # 時間指定がある場合は、時間範囲を抽出した後、件数でフィルタ
     if minutes:
         end_time = datetime.now(JST) - timedelta(minutes=int(minutes))
-        messages = [msg async for msg in channel.history(after=end_time, oldest_first=False) if not msg.content.startswith('!')]
+        messages = [
+            msg async for msg in channel.history(after=end_time, oldest_first=False)
+            if not msg.author.bot and not msg.content.startswith('!') and msg.author.id != bot.user.id
+        ]
         if counts:
             messages = messages[:counts]
     else:
         # 時間指定がない場合は、直近から件数分のメッセージを取得
-        messages = [msg async for msg in channel.history(limit=counts, oldest_first=False) if not msg.content.startswith('!')]
+        messages = [
+            msg async for msg in channel.history(limit=counts, oldest_first=False)
+            if not msg.author.bot and not msg.content.startswith('!') and msg.author.id != bot.user.id
+        ]
         
     # リストを古い順にソート
     messages.sort(key=lambda m: m.created_at)
