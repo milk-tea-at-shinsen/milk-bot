@@ -65,6 +65,38 @@ AI_ATTACHMENT_TYPE_ERROR_MESSAGE = (
     "pdfだけなんだにゃ〜💦"
 )
 
+AI_MAKE_MEETING_SUMMARY_PROMPT =f"""
+以下は、Discordの会議ログです。
+内容を分析し、以下のガイドラインに従って議事録を作成してください。
+
+--- 前提条件 ---
+- あなたはプロの議事録作成アシスタントです
+- 会議の内容を正確に把握し、要点を簡潔にまとめてください
+- 音声認識による誤認識の可能性や、話し手による言い間違いの可能性も考慮し、文脈から正しい内容を推測してください
+- 出力は指定した4項目の見出しと、その内容のみとし、前置きや結びの言葉、メタ情報などは一切含めないでください
+- 4項目の順番は入れ替えないでください
+- 全体の文字数は、Markdown記法や空白などを含めて最大4000文字以内に収めてください
+
+--- 出力内容 ---
+### 会議概要
+- 日時、参加者を記載
+### 議題
+- 会議の主なテーマを記載
+### 議事概要
+- 議事内容を構造化し、要約して箇条書きで記載
+### 決定事項
+- 合意・決定した事項や次回までの検討事項を記載
+- 該当がない場合は「特になし」と記載
+
+--- 出力フォーマット ---
+- Markdown記法で記載してください
+- 見出しのレベルは###を使用し、###の後に半角スペースを入れてください
+- 箇条書きには-を使用し、-の後に半角スペースを入れてください
+- コードブロック(```)は使用しないでください
+
+--- 会議ログ ---
+"""
+
 #===================================
 # 定数・グローバル変数・辞書の準備
 #===================================
@@ -515,13 +547,6 @@ def cancel_proxy_vote(guild_id, msg_id, voter, agent_id):
 #---------------
 # AI関係処理
 #---------------
-#=====AI発注用テキスト作成=====
-def make_gemini_text(guild_id, channel_id):
-    log_texts = all_data[guild_id]["log_texts"]
-    lines = [f"{item['time'].astimezone(JST).strftime('%Y/%m/%d %H:%M:%S')} {item['name']}: {item['text']}" for item in log_texts[channel_id]]
-    text = "\n".join(lines)
-    return text
-    
 #=====AIへの発注処理=====
 def ai_handler(prompt, text, attachment_part=None):
     contexts = f"{prompt}\n{text}"
@@ -562,6 +587,29 @@ async def get_ai_attachment(message):
         mime_type=attachment.content_type
     )
     return attachment_part, None
+
+#=====メッセージからログを生成=====
+def messages_to_events(messages):
+    # メッセージをログに記録
+    events = []
+    for message in messages:
+        events.append({
+            "time": message.created_at,
+            "name": message.author.nick or message.author.display_name or message.author.name,
+            "text": message.content.strip()
+        })
+
+    sorted_events = sorted(events, key=lambda item: item["time"])
+    
+    return sorted_events
+
+#=====AI渡し用にログ辞書をテキスト化=====
+def events_to_text(events):
+    # ログをテキスト化
+    lines = [f"{item['time'].astimezone(JST).strftime('%Y/%m/%d %H:%M:%S')} {item['name']}: {item['text']}" for item in events]
+    text = "\n".join(lines)
+
+    return text
 
 #=====AIエラー通知処理=====
 async def notify_ai_error(status_message, error):
@@ -1134,17 +1182,11 @@ async def handle_make_list(message):
 #---------------
 # 会議ログ作成関係
 #---------------
-#=====会議録作成=====
+#=====会議録csv作成=====
 def make_meeting_log(events, channel_id):
-    # イベントが空ならNoneを返す
-    if not events:
-        return None
     
-    # イベントを時系列でソート
-    sorted_events = sorted(events, key=lambda item: item["time"])
-
-    # 
-    start_time = sorted_events[0]["time"]
+    # csvを作成
+    start_time = events[0]["time"]
     filename = f"./tmp/meeting_log_{channel_id}_{start_time.astimezone(JST).strftime('%Y%m%d_%H%M%S')}.csv"
     make_csv(
         filename,
@@ -1154,15 +1196,25 @@ def make_meeting_log(events, channel_id):
                 item["name"],
                 item["text"]
             ]
-            for item in sorted_events
+            for item in events
         ],
         {
-            "title": "chat_log",
+            "title": "meeting_log",
             "logged_at": start_time.astimezone(JST).strftime("%Y/%m/%d %H:%M")
         },
         ["time", "name", "text"]
     )
     return filename
+
+#=====要約をembed化=====
+def make_summary_embed(summarized_text):
+    embed = discord.Embed(
+        title="Discord会議摘録",
+        description=summarized_text,
+        color=discord.Color.purple()
+    )
+
+    return embed
 
 #---------------
 # AIチャット関係
@@ -1171,8 +1223,7 @@ def make_meeting_log(events, channel_id):
 async def milkbot_talk(message, wait_msg):
     guild_id = message.guild.id
     channel = message.channel
-    log_texts = all_data[guild_id]["log_texts"]
-
+    
     # 添付ファイルの取得と確認
     try:
         attachment_part, attachment_error = await get_ai_attachment(message)
@@ -1188,18 +1239,12 @@ async def milkbot_talk(message, wait_msg):
     messages = await collect_message(channel=channel, counts=10)
 
     # メッセージをログに記録
-    add_log_text(guild_id, channel.id)
-    log_texts[channel.id] = []
-    for message in messages:
-        log_texts[channel.id].append({
-            "time": message.created_at,
-            "name": message.author.nick or message.author.display_name or message.author.name,
-            "text": message.content.strip()
-        })
+    sorted_events = messages_to_events(messages)
 
-    # AIチャット用にログをテキスト化
-    text = make_gemini_text(guild_id, channel.id)
+    # AI依頼用にログをテキスト化
+    text = events_to_text(sorted_events)
 
+    # プロンプトを作成
     prompt = f"""
 あなたは、DiscordサーバーのAIマスコット「みるぼっと」です。
 以下のキャラクター性とルールに従って、会話してください。
@@ -1254,13 +1299,14 @@ async def milkbot_talk(message, wait_msg):
 
 --- 会話ログ ---
 """
+
     try:
         response_text = ai_handler(prompt, text, attachment_part)
         await wait_msg.edit(response_text)
     except Exception as e:
         await notify_ai_error(wait_msg, e)
     finally:
-        log_texts[channel.id] = {}
+        sorted_events = []
 
 #---------------
 # メール文面作成関係
@@ -2142,72 +2188,37 @@ async def make_log(
     channel = ctx.channel
     messages = await collect_message(channel=channel, minutes=minutes, counts=None)
 
-    # メッセージをログに記録
-    events = []
-    for message in messages:
-        events.append({
-            "time": message.created_at,
-            "name": message.author.nick or message.author.display_name or message.author.name,
-            "text": message.content.strip()
-        })
+    sorted_events = messages_to_events(messages)
+
+    # メッセージがない場合はエラーを返す
+    if sorted_events is None or len(sorted_events) == 0:
+        return await status_msg.edit(content="⚠️議事録作成するメッセージがないよ")
 
     # ログをcsv化して保存
-    filename = make_meeting_log(events, channel.id)
-    text = make_gemini_text(guild_id, channel.id)
-    prompt = f"""
-以下は、Discordのボイスチャット会議のログです。
-内容を分析し、以下のガイドラインに従って議事録を作成してください。
+    filename = make_meeting_log(sorted_events, channel.id)
 
---- 前提条件 ---
-- あなたはプロの議事録作成アシスタントです
-- 会議の内容を正確に把握し、要点を簡潔にまとめてください
-- 音声認識による誤認識の可能性や、話し手による言い間違いの可能性も考慮し、文脈から正しい内容を推測してください
-- 出力は指定した4項目の見出しと、その内容のみとし、前置きや結びの言葉、メタ情報などは一切含めないでください
-- 4項目の順番は入れ替えないでください
-- 全体の文字数は、Markdown記法や空白などを含めて最大4000文字以内に収めてください
-
---- 出力内容 ---
-### 会議概要
-- 日時、参加者を記載
-### 議題
-- 会議の主なテーマを記載
-### 議事概要
-- 議事内容を構造化し、要約して箇条書きで記載
-### 決定事項
-- 合意・決定した事項や次回までの検討事項を記載
-- 該当がない場合は「特になし」と記載
-
---- 出力フォーマット ---
-- Markdown記法で記載してください
-- 見出しのレベルは###を使用し、###の後に半角スペースを入れてください
-- 箇条書きには-を使用し、-の後に半角スペースを入れてください
-- コードブロック(```)は使用しないでください
-
---- 会議ログ ---
-"""
+    # ログをテキスト化
+    text = events_to_text(sorted_events)
+    
     try:
-        summarized_text = ai_handler(prompt, text)
-        print(f"summarized_text: {summarized_text}")
+        # AIに要約を依頼
+        summarized_text = ai_handler(AI_MAKE_MEETING_SUMMARY_PROMPT, text)
 
-        # embed作成
-        embed = discord.Embed(
-            title="チャット会議摘録",
-            description=summarized_text,
-            color=discord.Color.purple()
-        )
+        # 要約からembedを作成
+        embed = make_summary_embed(summarized_text)
+
         # discordに送信
         await status_msg.edit(content="", embed=embed)
-        await channel.send(content="チャット会議のログを作成したよ🫡", file=discord.File(filename))
-
+                
     except Exception as e:
         await notify_ai_error(status_msg, e)
-
+        return
+    
     finally:
-        # 一時ファイルを削除
+        # 一時ファイルを削除して変数を初期化
+        await channel.send(content="チャット会議のログを作成したよ🫡", file=discord.File(filename))
         remove_tmp_file(filename)
-        
-        # 録音セッション辞書からチャンネルIDを削除
-        remove_log_text(guild_id, channel.id, channel.name)
+        sorted_events = []
 
 #---------------
 # AIチャット関係
