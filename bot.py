@@ -635,7 +635,7 @@ def make_csv(filename, rows, meta=None, header=None):
         writer.writerows(rows)
 
 #=====範囲を指定してメッセージのリストを作成=====
-async def collect_message(channel, counts=None, minutes=None):
+async def collect_message(channel, counts=None, minutes=None, exclude_bot=True):
     # 返信先メッセージをリストに格納
     messages = []
     
@@ -664,18 +664,36 @@ async def collect_message(channel, counts=None, minutes=None):
     # 時間指定がある場合は、時間範囲を抽出した後、件数でフィルタ
     if minutes:
         end_time = datetime.now(JST) - timedelta(minutes=int(minutes))
-        messages = [
-            msg async for msg in channel.history(after=end_time, oldest_first=False)
-            if not msg.author.bot and not msg.content.startswith('!') and msg.author.id != bot.user.id
-        ]
+
+        messages = []
+        async for msg in channel.history(after=end_time, oldest_first=False):
+            # !コマンドなら除外
+            if msg.content.startswith('!'):
+                continue
+            # みるぼっと以外のbotなら除外
+            if msg.author.bot and msg.author.id != bot.user.id:
+                continue
+            # AIチャット以外なら自分を除外
+            if exclude_bot and msg.author.id == bot.user.id:
+                continue
+            messages.append(msg)
+
         if counts:
             messages = messages[:counts]
     else:
         # 時間指定がない場合は、直近から件数分のメッセージを取得
-        messages = [
-            msg async for msg in channel.history(limit=counts, oldest_first=False)
-            if not msg.author.bot and not msg.content.startswith('!') and msg.author.id != bot.user.id
-        ]
+        messages = []
+        async for msg in channel.history(limit=counts, oldest_first=False):
+            # !コマンドなら除外
+            if msg.content.startswith('!'):
+                continue
+            # みるぼっと以外のbotなら除外
+            if msg.author.bot and msg.author.id != bot.user.id:
+                continue
+            # AIチャット以外なら自分を除外
+            if exclude_bot and msg.author.id == bot.user.id:
+                continue
+            messages.append(msg)
         
     # リストを古い順にソート
     messages.sort(key=lambda m: m.created_at)
@@ -1226,7 +1244,7 @@ def make_summary_embed(summarized_text):
 # AIチャット関係
 #---------------
 #=====AIチャットトーク=====
-async def milkbot_talk(message, wait_msg):
+async def milkbot_talk(message):
     guild_id = message.guild.id
     channel = message.channel
     
@@ -1234,15 +1252,17 @@ async def milkbot_talk(message, wait_msg):
     try:
         attachment_part, attachment_error = await get_ai_attachment(message)
     except Exception as e:
-        await notify_ai_error(wait_msg, e)
+        print(f"AI attachment error ({type(e).__name__}): {e}")
+        await message.channel.send(AI_ERROR_MESSAGE)
         return
     
     if attachment_error:
-        await wait_msg.edit(content=attachment_error)
+        await message.channel.send(content=attachment_error)
         return
 
     # 指定範囲内のメッセージを取得
-    messages = await collect_message(channel=channel, counts=10)
+    messages = await collect_message(channel=channel, counts=10, exclude_bot=False)
+    wait_msg = await message.channel.send(f"{bot.user.display_name}が考え中…🤔")
 
     # メッセージをログに記録
     sorted_events = messages_to_events(messages)
@@ -1736,8 +1756,7 @@ async def on_message(message):
     )
 
     if message.channel.id in ai_chat_channels and not has_other_mention:
-        wait_msg = await message.channel.send(f"{bot.user.display_name}が考え中…🤔")
-        await milkbot_talk(message, wait_msg)
+        await milkbot_talk(message)
     
     # 管理者秘密のメッセージ
     if message.author.id == 889734500274286663 and message.content[:1] == ".":
