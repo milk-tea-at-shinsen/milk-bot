@@ -148,52 +148,8 @@ except Exception as e:
 
 print(f"dict all_data: {all_data}")
 
-# #---リマインダー辞書---
-# raw_data = load_data("reminders")
-# try:
-#     if raw_data:
-#         reminders = {datetime.fromisoformat(key): value for key, value in raw_data.items()}
-#     else:
-#         reminders = {}
-# except:
-#     reminders = {}
-    
-# print(f"dict reminders: {reminders}")
-
-# #---投票辞書---
-# raw_data = load_data("votes")
-# if raw_data:
-#     votes = {int(key): value for key, value in raw_data.items()}
-# else:
-#     votes = {}
-# print(f"dict votes: {votes}")
-
-# #---代理投票辞書---
-# raw_data = load_data("proxy_votes")
-# try:
-#     if raw_data:
-#         proxy_votes = {int(key): value for key, value in raw_data.items()}
-#     else:
-#         proxy_votes = {}
-# except:
-#     proxy_votes = {}
-    
-# print(f"dict proxy_votes: {proxy_votes}")
-
-# #---リスト化対象チャンネル辞書---
-# raw_data = load_data("make_list_channels")
-# try:
-#     if raw_data:
-#         make_list_channels = {key: value for key, value in raw_data.items()}
-#     else:
-#         make_list_channels = {"channels": []}
-# except:
-#     make_list_channels = {"channels": []}
-
-# print(f"dict make_list_channels: {make_list_channels}")
-
-# #---録音セッション---
-# rec_sessions = {}
+#---録音セッション---
+active_meeting_session = None
 
 #=====辞書プリセット処理=====
 def preset_dict(guild_id):
@@ -2315,6 +2271,56 @@ async def npc_attack_delete(ctx: discord.ApplicationContext):
     # 攻城予定が設定されていない場合のメッセージ
     else:
         await ctx.interaction.response.send_message("⚠️設定されている攻城予定がないよ", ephemeral=True)
+
+#---------------
+# 録音関係
+#---------------
+#=====/recording_start コマンド=====
+@bot.slash_command(name="recording_start", description="録音を開始するよ")
+async def recording_start(ctx: discord.ApplicationContext):
+    global active_meeting_session
+
+    # すでに録音セッションが存在している場合はエラーを返す
+    if active_meeting_session is not None:
+        await ctx.interaction.response.send_message("⚠️別の録音が実行中だよ", ephemeral=True)
+        return
+
+    # コマンド実行者がVCに参加していない場合はエラーを返す
+    if ctx.author.voice is None:
+        await ctx.interaction.response.send_message("⚠️先にVCに参加してね", ephemeral=True)
+        return
+    
+    # コマンド実行チャンネルと、ボイスチャットチャンネルを取得
+    command_channel = ctx.channel
+    voice_channel = ctx.author.voice.channel
+
+    # 録音セッションに記録を行う
+    active_meeting_session = {
+        "guild_id": ctx.guild.id,
+        "voice_channel_id": voice_channel.id,
+        "output_channel_id": command_channel.id,
+        "text_channel_ids": {
+            command_channel.id,
+            voice_channel.id
+        },
+        "started_at": datetime.now(JST),
+        "events": [],
+    }
+    await ctx.interaction.response.send_message("⏺️ボイスチャットの録音を開始したよ🫡")
+
+#=====/recording_stop コマンド=====
+@bot.slash_command(name="recording_stop", description="録音を停止するよ")
+async def recording_stop(ctx: discord.ApplicationContext):
+    global active_meeting_session
+
+    # 録音セッションを開始していない場合はエラーを返す
+    if active_meeting_session is None:
+        await ctx.interaction.response.send_message("⚠️今は録音してないよ", ephemeral=True)
+        return
+
+    # 録音セッションを解放
+    active_meeting_session = None
+    await ctx.interaction.response.send_message("⏹️ボイスチャットの録音を停止したよ🫡")
 
 # Botを起動
 bot.run(os.getenv("DISCORD_TOKEN"))
