@@ -1219,10 +1219,11 @@ async def make_meeting_log(events, channel, status_message):
             return
         
         finally:
+            try:
             # 一時ファイルを削除して変数を初期化
-            await channel.send(content="チャット会議のログを作成したよ🫡", file=discord.File(filename))
-            remove_tmp_file(filename)
-            sorted_events = []
+                await channel.send(content="チャット会議のログを作成したよ🫡", file=discord.File(filename))
+            finally:
+                remove_tmp_file(filename)
 
 #---------------
 # AIチャット関係
@@ -2219,7 +2220,7 @@ async def make_log(
     if sorted_events is None or len(sorted_events) == 0:
         return await status_message.edit(content="⚠️議事録作成するメッセージがないよ")
 
-    make_meeting_log(sorted_events, channel, status_message)
+    await make_meeting_log(sorted_events, channel, status_message)
 
 #---------------
 # AIチャット関係
