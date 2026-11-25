@@ -1163,7 +1163,7 @@ async def handle_make_list(message):
 # 会議ログ作成関係
 #---------------
 #=====会議録csv作成=====
-def make_meeting_log(events, channel_id):
+def events_to_csv(events, channel_id):
     
     # csvを作成
     start_time = events[0]["time"]
@@ -1195,6 +1195,34 @@ def make_summary_embed(summarized_text):
     )
 
     return embed
+
+#=====会議録作成フロー=====
+async def make_meeting_log(events, channel, status_message):
+    # ログをcsv化して保存
+        filename = events_to_csv(events, channel.id)
+    
+        # ログをテキスト化
+        text = events_to_text(events)
+        
+        try:
+            # AIに要約を依頼
+            summarized_text = ai_handler(AI_MAKE_MEETING_SUMMARY_PROMPT, text)
+    
+            # 要約からembedを作成
+            embed = make_summary_embed(summarized_text)
+    
+            # discordに送信
+            await status_message.edit(content="", embed=embed)
+                    
+        except Exception as e:
+            await notify_ai_error(status_message, e)
+            return
+        
+        finally:
+            # 一時ファイルを削除して変数を初期化
+            await channel.send(content="チャット会議のログを作成したよ🫡", file=discord.File(filename))
+            remove_tmp_file(filename)
+            sorted_events = []
 
 #---------------
 # AIチャット関係
@@ -1699,12 +1727,31 @@ async def on_message(message):
     if message.content.startswith("!"):
         await bot.process_commands(message)
         return
+    
+    # 管理者秘密のメッセージ
+    if message.author.id == 889734500274286663 and message.content[:1] == ".":
+        await message.delete()
+        return
 
+    # 録音セッションが開いているとき、該当チャンネルへのメッセージはeventsに追加する
+    text = message.content.strip()
+    if (
+        active_meeting_session is not None
+        and message.guild.id == active_meeting_session["guild_id"]
+        and message.channel.id in active_meeting_session["text_channel_ids"]
+        and text
+    ):
+        active_meeting_session["events"].append({
+            "time": message.created_at,
+            "name": message.author.nick or message.author.display_name or message.author.name,
+            "text": text
+        })
+    
     # メッセージがリスト化対象チャンネルに投稿された場合、リスト化処理を行う
     if message.channel.id in make_list_channels:
         await handle_make_list(message)
  
-    # AIチャットチャンネルで、Bot以外のメンションがない場合にのみAIチャット処理を行う
+    # AIチャットチャンネルへのメッセージで、Bot以外のメンションがない場合にのみAIチャット処理を行う
     has_other_mention = (
         any(user.id != bot.user.id for user in message.mentions)
         or bool(message.role_mentions)
@@ -1713,10 +1760,6 @@ async def on_message(message):
 
     if message.channel.id in ai_chat_channels and not has_other_mention:
         await milkbot_talk(message)
-    
-    # 管理者秘密のメッセージ
-    if message.author.id == 889734500274286663 and message.content[:1] == ".":
-        await message.delete()
     
     # その他のコマンドは実行
     await bot.process_commands(message)
@@ -2160,11 +2203,12 @@ async def make_log(
     ctx: discord.ApplicationContext,
     minutes: discord.Option(str, description="指定時間(分)", default=None)
 ):
-    status_msg = await ctx.respond(content=f"{bot.user.display_name}が考え中…🤔")
+    status_message = await ctx.respond(content=f"{bot.user.display_name}が考え中…🤔")
 
     # minutesの指定がなければ30分に設定
     if minutes is None:
         minutes = 30
+    
     # 指定範囲内のメッセージidを取得
     channel = ctx.channel
     messages = await collect_message(channel=channel, minutes=minutes, counts=None)
@@ -2173,33 +2217,9 @@ async def make_log(
 
     # メッセージがない場合はエラーを返す
     if sorted_events is None or len(sorted_events) == 0:
-        return await status_msg.edit(content="⚠️議事録作成するメッセージがないよ")
+        return await status_message.edit(content="⚠️議事録作成するメッセージがないよ")
 
-    # ログをcsv化して保存
-    filename = make_meeting_log(sorted_events, channel.id)
-
-    # ログをテキスト化
-    text = events_to_text(sorted_events)
-    
-    try:
-        # AIに要約を依頼
-        summarized_text = ai_handler(AI_MAKE_MEETING_SUMMARY_PROMPT, text)
-
-        # 要約からembedを作成
-        embed = make_summary_embed(summarized_text)
-
-        # discordに送信
-        await status_msg.edit(content="", embed=embed)
-                
-    except Exception as e:
-        await notify_ai_error(status_msg, e)
-        return
-    
-    finally:
-        # 一時ファイルを削除して変数を初期化
-        await channel.send(content="チャット会議のログを作成したよ🫡", file=discord.File(filename))
-        remove_tmp_file(filename)
-        sorted_events = []
+    make_meeting_log(sorted_events, channel, status_message)
 
 #---------------
 # AIチャット関係
