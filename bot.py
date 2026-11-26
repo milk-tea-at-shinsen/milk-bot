@@ -2341,13 +2341,14 @@ async def recording_stop(ctx: discord.ApplicationContext):
         return
 
     # /recording_startと同じチャンネルでなければエラーを返す
-    if ctx.channel.id != active_meeting_session[guild_id]["output_channel_id"]:
+    output_channel_id = active_meeting_session["output_channel_id"]
+    if ctx.channel.id != output_channel_id:
         await ctx.interaction.response.send_message(f"⚠️録音を開始したチャンネル(<#{output_channel_id}>)で実行してね", ephemeral=True)
         return
     
     # eventsを取得
     status_message = await ctx.respond(content="⏹️ボイスチャットの録音を停止したよ🫡")
-    events = active_meeting_session[ctx.guild.id]["events"]
+    events = active_meeting_session["events"]
     
     # eventsが空の場合はエラーを返す
     if not events:
@@ -2355,7 +2356,7 @@ async def recording_stop(ctx: discord.ApplicationContext):
         return
     
     # eventsをログ化→Discordに要約とログを投稿
-    make_meeting_log(events, guild.id, status_message)
+    make_meeting_log(events, ctx.channel, status_message)
 
     # 録音セッションを解放
     active_meeting_session = None
