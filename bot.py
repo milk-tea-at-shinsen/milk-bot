@@ -783,7 +783,7 @@ def make_poll_embed(options, reactions, question, description):
     return embed
 
 #=====投票集計=====
-async def make_vote_result(interaction, msg_id):
+async def make_vote_result(interaction, msg_id, *, vote_channel=None):
     print("[start: make_vote_result]")
     votes = all_data[interaction.guild.id]["votes"]
     proxy_votes = all_data[interaction.guild.id]["proxy_votes"]
@@ -794,7 +794,9 @@ async def make_vote_result(interaction, msg_id):
     else:
         options = []
     # メッセージを読み込み
-    message = await interaction.channel.fetch_message(msg_id)
+    channel = vote_channel if vote_channel is not None else interaction.channel
+    message = await channel.fetch_message(msg_id)
+
     # サーバー情報を読み込み
     guild = interaction.guild
     
