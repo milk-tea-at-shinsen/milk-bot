@@ -881,7 +881,7 @@ async def show_vote_result(interaction, dt, result, msg_id, mode):
     # embedを表示
     
     if interaction.message:
-        await interaction.edit_original_message(
+        await interaction.edit_original_response(
             content="投票結果を集計したよ🫡",
             view=None
         )
