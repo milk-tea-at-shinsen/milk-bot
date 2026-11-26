@@ -2347,7 +2347,6 @@ async def recording_stop(ctx: discord.ApplicationContext):
         return
     
     # eventsを取得
-    status_message = await ctx.respond(content="⏹️ボイスチャットの録音を停止したよ🫡")
     events = active_meeting_session["events"]
     
     # eventsが空の場合はエラーを返す
@@ -2355,8 +2354,10 @@ async def recording_stop(ctx: discord.ApplicationContext):
         await ctx.interaction.response.send_message("️⚠️記録された発言はなかったよ", ephemeral=True)
         return
     
+    status_message = await ctx.respond(content="⏹️ボイスチャットの録音を停止したよ🫡")
+    
     # eventsをログ化→Discordに要約とログを投稿
-    make_meeting_log(events, ctx.channel, status_message)
+    await make_meeting_log(events, ctx.channel, status_message)
 
     # 録音セッションを解放
     active_meeting_session = None
