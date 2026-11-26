@@ -1502,7 +1502,7 @@ class VoteSelect(View):
 
             vote = votes.get(msg_id)
             if vote is None:
-                await interaction.edit_original_response(content="⚠️ この投票はもう終了しているよ")
+                await interaction.edit_original_response(content="⚠️この投票はもう終了しているよ")
                 return
 
             channel_id = vote.get("channel_id")
@@ -1511,12 +1511,12 @@ class VoteSelect(View):
                 vote_channel = interaction.guild.get_channel_or_thread(channel_id)
 
             if vote_channel is None:
-                await interaction.edit_original_response(content="⚠️ 投票元のチャンネルが見つからないよ")
+                await interaction.edit_original_response(content="⚠️投票元のチャンネルが見つからないよ")
                 return
 
             permissions = vote_channel.permissions_for(interaction.user)
             if not (permissions.view_channel and permissions.read_message_history):
-                await interaction.edit_original_response(content="⚠️ 投票元のチャンネルを閲覧できないよ")
+                await interaction.edit_original_response(content="⚠️投票元のチャンネルを閲覧できないよ")
                 return
 
             try:
