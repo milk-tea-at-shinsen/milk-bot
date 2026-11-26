@@ -554,10 +554,8 @@ def messages_to_events(messages):
             "name": message.author.nick or message.author.display_name or message.author.name,
             "text": message.content.strip()
         })
-
-    sorted_events = sorted(events, key=lambda item: item["time"])
     
-    return sorted_events
+    return events
 
 #=====AI渡し用にログ辞書をテキスト化=====
 def events_to_text(events):
@@ -1198,32 +1196,35 @@ def make_summary_embed(summarized_text):
 
 #=====会議録作成フロー=====
 async def make_meeting_log(events, channel, status_message):
+    # eventsを時系列で並び替え
+    sorted_events = sorted(events, key=lambda item: item["time"])
+    
     # ログをcsv化して保存
-        filename = events_to_csv(events, channel.id)
+    filename = events_to_csv(sorted_events, channel.id)
     
-        # ログをテキスト化
-        text = events_to_text(events)
+    # ログをテキスト化
+    text = events_to_text(sorted_events)
         
-        try:
-            # AIに要約を依頼
-            summarized_text = ai_handler(AI_MAKE_MEETING_SUMMARY_PROMPT, text)
+    try:
+        # AIに要約を依頼
+        summarized_text = ai_handler(AI_MAKE_MEETING_SUMMARY_PROMPT, text)
     
-            # 要約からembedを作成
-            embed = make_summary_embed(summarized_text)
+        # 要約からembedを作成
+        embed = make_summary_embed(summarized_text)
     
-            # discordに送信
-            await status_message.edit(content="", embed=embed)
+        # discordに送信
+        await status_message.edit(content="", embed=embed)
                     
-        except Exception as e:
-            await notify_ai_error(status_message, e)
-            return
+    except Exception as e:
+        await notify_ai_error(status_message, e)
+        return
         
-        finally:
-            try:
+    finally:
+        try:
             # 一時ファイルを削除して変数を初期化
-                await channel.send(content="チャット会議のログを作成したよ🫡", file=discord.File(filename))
-            finally:
-                remove_tmp_file(filename)
+            await channel.send(content="チャット会議のログを作成したよ🫡", file=discord.File(filename))
+        finally:
+            remove_tmp_file(filename)
 
 #---------------
 # AIチャット関係
@@ -2078,7 +2079,7 @@ async def table_ocr(
     counts: discord.Option(str, description="指定件数(件)", required=False),
     minutes: discord.Option(str, description="指定時間(分)", required=False)
 ):
-    status_msg = await ctx.respond(content=f"{bot.user.display_name}が考え中…🤔")
+    status_message = await ctx.respond(content=f"{bot.user.display_name}が考え中…🤔")
 
     # 指定した範囲のメッセージを取得
     messages = await collect_message(ctx.interaction.channel, counts, minutes)
@@ -2104,7 +2105,7 @@ async def table_ocr(
     make_csv(filename, rows)
     
     # CSVを出力
-    await status_msg.edit(
+    await status_message.edit(
         content="OCR結果のCSVだよ🫡",
         file=discord.File(filename)
     )
@@ -2120,7 +2121,7 @@ async def context_ocr(ctx: discord.ApplicationContext, message: discord.Message)
         await ctx.interaction.response.send_message(content="⚠️画像が添付されてないよ", ephemeral=True)
         return
 
-    status_msg = await ctx.respond(content=f"{bot.user.display_name}が考え中…🤔")
+    status_message = await ctx.respond(content=f"{bot.user.display_name}が考え中…🤔")
 
     # 画像ごとにOCR処理を実行してtemp_rowsに格納
     temp_rows = []
@@ -2141,7 +2142,7 @@ async def context_ocr(ctx: discord.ApplicationContext, message: discord.Message)
     make_csv(filename, rows)
     
     # CSVを出力
-    await status_msg.edit(
+    await status_message.edit(
         content="OCR結果のCSVだよ🫡",
         file=discord.File(filename)
     )
@@ -2272,7 +2273,7 @@ async def npc_attack_mail(
 ):
     guild_id = ctx.guild.id
     npc_attack_plans = all_data[guild_id]["npc_attack_plans"]
-    status_msg = await ctx.respond(content=f"{bot.user.display_name}が考え中…🤔", ephemeral=True)
+    status_message = await ctx.respond(content=f"{bot.user.display_name}が考え中…🤔", ephemeral=True)
 
     dt = datetime.strptime(f"{date} {time}", "%Y/%m/%d %H:%M").replace(tzinfo=JST)
     add_npc_attack_plan(guild_id, dt, target, main_force, tank_unit, comment)
@@ -2338,10 +2339,14 @@ async def recording_stop(ctx: discord.ApplicationContext):
     if active_meeting_session is None:
         await ctx.interaction.response.send_message("⚠️今は録音してないよ", ephemeral=True)
         return
+    
+    # eventsを取得してログ化→Discordに要約とログを投稿
+    status_message = await ctx.respond(content="⏹️ボイスチャットの録音を停止したよ🫡")
+    events = active_meeting_session[ctx.guild.id]["events"]
+    make_meeting_log(events, guild.id, status_message)
 
     # 録音セッションを解放
     active_meeting_session = None
-    await ctx.interaction.response.send_message("⏹️ボイスチャットの録音を停止したよ🫡")
 
 # Botを起動
 bot.run(os.getenv("DISCORD_TOKEN"))
