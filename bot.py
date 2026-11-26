@@ -276,10 +276,15 @@ def add_reminder(guild_id, dt, repeat, interval, channel_id, msg):
     save_all_data()
 
 #---投票辞書---
-def add_vote(guild_id, msg_id, question, reactions, options):
+def add_vote(guild_id, msg_id, question, reactions, options, channel_id=None):
     votes = all_data[guild_id]["votes"]
+
+    if channel_id is None:
+        channel_id = votes[msg_id]["channel_id"]
+
     # 辞書に項目を登録
     votes[msg_id] = {
+        "channel_id": channel_id,
         "question": question,
         "reactions": reactions,
         "options": options
@@ -778,7 +783,7 @@ def make_poll_embed(options, reactions, question, description):
     return embed
 
 #=====投票集計=====
-async def make_vote_result(interaction, msg_id):
+async def make_vote_result(interaction, msg_id, *, vote_channel=None):
     print("[start: make_vote_result]")
     votes = all_data[interaction.guild.id]["votes"]
     proxy_votes = all_data[interaction.guild.id]["proxy_votes"]
@@ -789,7 +794,9 @@ async def make_vote_result(interaction, msg_id):
     else:
         options = []
     # メッセージを読み込み
-    message = await interaction.channel.fetch_message(msg_id)
+    channel = vote_channel if vote_channel is not None else interaction.channel
+    message = await channel.fetch_message(msg_id)
+
     # サーバー情報を読み込み
     guild = interaction.guild
     
@@ -1495,7 +1502,37 @@ class VoteSelect(View):
                 view=None,
             )
 
-            dt, result = await make_vote_result(interaction, msg_id)
+            vote = votes.get(msg_id)
+            if vote is None:
+                await interaction.edit_original_response(content="⚠️この投票はもう終了しているよ")
+                return
+
+            channel_id = vote.get("channel_id")
+            vote_channel = interaction.channel
+            if channel_id is not None and channel_id != interaction.channel.id:
+                vote_channel = interaction.guild.get_channel_or_thread(channel_id)
+
+            if vote_channel is None:
+                await interaction.edit_original_response(content="⚠️投票元のチャンネルが見つからないよ")
+                return
+
+            permissions = vote_channel.permissions_for(interaction.user)
+            if not (permissions.view_channel and permissions.read_message_history):
+                await interaction.edit_original_response(content="⚠️投票元のチャンネルを閲覧できないよ")
+                return
+
+            try:
+                dt, result = await make_vote_result(
+                    interaction, msg_id, vote_channel=vote_channel
+                )
+            except discord.NotFound:
+                await interaction.edit_original_response(
+                    content="⚠️ 元の投票が見つからないよ。以前の投票なら、作成したチャンネルで試してね"
+                )
+                return
+            except discord.Forbidden:
+                await interaction.edit_original_response(content="⚠️ Botが元の投票を読み取れないよ")
+                return
 
             # 結果表示処理
             if self.mode == VoteSelectMode.MID_RESULT:
@@ -1956,7 +1993,7 @@ async def vote(ctx: discord.ApplicationContext,
         await message.add_reaction(reactions[i])
     
     # 辞書に保存
-    add_vote(ctx.guild.id, message.id, question, reactions, options)
+    add_vote(ctx.guild.id, message.id, question, reactions, options, message.channel.id)
 
 #=====/vote_add_option コマンド=====
 @bot.slash_command(name="vote_add_option", description="投票に選択肢を追加するよ")
