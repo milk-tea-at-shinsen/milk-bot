@@ -1784,6 +1784,7 @@ async def on_message(message):
         and message.guild.id == active_meeting_session["guild_id"]
         and message.channel.id in active_meeting_session["text_channel_ids"]
         and text
+        and active_meeting_session["collecting"] == True
     ):
         active_meeting_session["events"].append({
             "time": message.created_at,
@@ -2379,43 +2380,46 @@ async def recording_start(ctx: discord.ApplicationContext):
 async def recording_stop(ctx: discord.ApplicationContext):
     global active_meeting_session
 
+    session = active_meeting_session
+
     # 録音セッションを開始していない場合はエラーを返す
-    if active_meeting_session is None:
+    if session is None:
         await ctx.interaction.response.send_message("⚠️今は録音してないよ", ephemeral=True)
         return
     
-    collecting = active_meeting_session["collecting"]
-    publishing = active_meeting_session["publishing"]
-    output_channel_id = active_meeting_session["output_channel_id"]
-    events = active_meeting_session["events"]
-    
     # /recording_startと同じチャンネルでなければエラーを返す
+    output_channel_id = session["output_channel_id"]
     if ctx.channel.id != output_channel_id:
         await ctx.interaction.response.send_message(f"⚠️録音を開始したチャンネル(<#{output_channel_id}>)で実行してね", ephemeral=True)
         return
 
     # eventsへの書き込みを停止
-    collecting = False
+    session["collecting"] = False
     
     # コマンドの重複実行の場合はエラーを返す
-    if publishing == True:
+    if session["publishing"] == True:
         await ctx.interaction.response.send_message(f"⚠️いま議事録作成処理中だよ", ephemeral=True)
         return
 
     # eventsが空の場合はエラーを返してセッションを解放する
+    events = session["events"]
     if not events:
         active_meeting_session = None
         await ctx.interaction.response.send_message("️⚠️記録された発言はなかったよ", ephemeral=True)
         return
     
     # 議事録作成処理開始フラグを立てる
-    publishing = True
-    
-    
-    status_message = await ctx.respond(content="⏹️ボイスチャットの録音を停止したよ🫡")
-    
-    # eventsをログ化→Discordに要約とログを投稿
-    await make_meeting_log(events, ctx.channel, status_message)
+    session["publishing"] = True
+
+    # eventsを議事録作成処理に渡す
+    try:    
+        status_message = await ctx.respond(content="⏹️ボイスチャットの録音を停止したよ🫡")
+        await make_meeting_log(events, ctx.channel, status_message)
+    except Exception as e:
+        session["publishing"] = False
+        print(f"[recording_stop] {type(e).__name__}: {e}", flush=True)
+        await ctx.respond("⚠️議事録の作成に失敗したよ\nもう一度 `/recording_stop` を実行してね", ephemeral=True)
+        return
 
     # 録音セッションを解放
     active_meeting_session = None
