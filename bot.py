@@ -2368,6 +2368,8 @@ async def recording_start(ctx: discord.ApplicationContext):
             voice_channel.id
         },
         "started_at": datetime.now(JST),
+        "collecting": True,
+        "publishing": False,
         "events": [],
     }
     await ctx.interaction.response.send_message("⏺️ボイスチャットの録音を開始したよ🫡")
@@ -2381,20 +2383,34 @@ async def recording_stop(ctx: discord.ApplicationContext):
     if active_meeting_session is None:
         await ctx.interaction.response.send_message("⚠️今は録音してないよ", ephemeral=True)
         return
-
-    # /recording_startと同じチャンネルでなければエラーを返す
+    
+    collecting = active_meeting_session["collecting"]
+    publishing = active_meeting_session["publishing"]
     output_channel_id = active_meeting_session["output_channel_id"]
+    events = active_meeting_session["events"]
+    
+    # /recording_startと同じチャンネルでなければエラーを返す
     if ctx.channel.id != output_channel_id:
         await ctx.interaction.response.send_message(f"⚠️録音を開始したチャンネル(<#{output_channel_id}>)で実行してね", ephemeral=True)
         return
+
+    # eventsへの書き込みを停止
+    collecting = False
     
-    # eventsを取得
-    events = active_meeting_session["events"]
-    
-    # eventsが空の場合はエラーを返す
+    # コマンドの重複実行の場合はエラーを返す
+    if publishing == True:
+        await ctx.interaction.response.send_message(f"⚠️いま議事録作成処理中だよ", ephemeral=True)
+        return
+
+    # eventsが空の場合はエラーを返してセッションを解放する
     if not events:
+        active_meeting_session = None
         await ctx.interaction.response.send_message("️⚠️記録された発言はなかったよ", ephemeral=True)
         return
+    
+    # 議事録作成処理開始フラグを立てる
+    publishing = True
+    
     
     status_message = await ctx.respond(content="⏹️ボイスチャットの録音を停止したよ🫡")
     
