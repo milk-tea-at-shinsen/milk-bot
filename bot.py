@@ -2429,16 +2429,22 @@ async def recording_stop(ctx: discord.ApplicationContext):
 async def voice_receive_test(ctx: discord.ApplicationContext):
     voice = ctx.author.voice if isinstance(ctx.author, discord.Member) else None
     
-    # VCに参加していない場合はエラーを返す
+    # コマンド実行者がVCに参加していない場合はエラーを返す
     if voice is None or voice.channel is None:
         await ctx.respond("⚠️先にVCに参加してね", ephemeral=True)
         return
 
-    if ctx.guild.voice_client is not None or active_meeting_session is not None:
-        await ctx.respond("⚠️ VC接続か会議セッションがすでにあるよ", ephemeral=True)
+    # すでに録音を開始している場合はエラーを返す
+    if ctx.guild.voice_client is not None:
+        await ctx.respond("⚠️すでに録音中だよ", ephemeral=True)
         return
 
-    await ctx.respond("🔊 音声受信テストを準備中。BotがVCに入ったら話してね")
+    # すでにセッションが開始されている倍はエラーを返す
+    if active_meeting_session is not None:
+        await ctx.respond("⚠️すでにセッションが開始されているよ", ephemeral=True)
+        return
+
+    await ctx.respond("🔊音声受信テストを準備中。BotがVCに入ったら話してね")
 
     vc = None
     finished = asyncio.Event()
