@@ -2424,5 +2424,54 @@ async def recording_stop(ctx: discord.ApplicationContext):
     # 録音セッションを解放
     active_meeting_session = None
 
+#=====/voice_receive_test コマンド=====
+@bot.slash_command(name="voice_receive_test", description="VCの音声受信をテストするよ")
+async def voice_receive_test(ctx: discord.ApplicationContext):
+    voice = ctx.author.voice if isinstance(ctx.author, discord.Member) else None
+    
+    # VCに参加していない場合はエラーを返す
+    if voice is None or voice.channel is None:
+        await ctx.respond("⚠️先にVCに参加してね", ephemeral=True)
+        return
+
+    if ctx.guild.voice_client is not None or active_meeting_session is not None:
+        await ctx.respond("⚠️ VC接続か会議セッションがすでにあるよ", ephemeral=True)
+        return
+
+    await ctx.respond("🔊 音声受信テストを準備中。BotがVCに入ったら話してね")
+
+    vc = None
+    finished = asyncio.Event()
+    received_bytes = {}
+
+    async def on_recording_finished(sink):
+        try:
+            for user_id, audio in sink.audio_data.items():
+                audio.file.seek(0, os.SEEK_END)
+                received_bytes[user_id] = audio.file.tell()
+        finally:
+            for audio in sink.audio_data.values():
+                audio.file.close()
+            finished.set()
+
+    try:
+        vc = await voice.channel.connect(timeout=10.0, reconnect=False)
+        vc.start_recording(discord.sinks.PCMSink(), on_recording_finished)
+        await asyncio.sleep(10)
+        vc.stop_recording()
+        await asyncio.wait_for(finished.wait(), timeout=10)
+
+        print(f"[voice_receive_test] bytes_by_user={received_bytes}", flush=True)
+        speakers = sum(size > 0 for size in received_bytes.values())
+        result = f"⏹️ テスト終了。音声を受信したユーザーは {speakers} 人だよ"
+    except Exception as e:
+        print(f"[voice_receive_test] {type(e).__name__}: {e}", flush=True)
+        result = "⚠️ 音声受信テストに失敗したよ。VPSのログを確認してね"
+    finally:
+        if vc is not None:
+            await vc.disconnect(force=True)
+
+    await ctx.interaction.edit_original_response(content=result)
+
 # Botを起動
 bot.run(os.getenv("DISCORD_TOKEN"))
